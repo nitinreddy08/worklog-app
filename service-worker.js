@@ -1,4 +1,4 @@
-const CACHE_NAME = "worklog-shell-v2";
+const CACHE_NAME = "worklog-shell-v3";
 
 const SHELL_FILES = [
   "./",

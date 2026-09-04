@@ -14,11 +14,13 @@ const CONFIG = {
   // a weak, best-effort filter rather than real authentication.
   API_SECRET: "nitinreddyworklog",
   REQUEST_TIMEOUT_MS: 15000,
+  MAX_RECENT_TICKETS: 6,
 };
 
 const STORAGE_KEYS = {
   pendingQueue: "worklog_pending_queue",
   draftPrefix: "worklog_draft_",
+  recentTickets: "worklog_recent_tickets",
 };
 
 /* ------------------------------------------------------------------ */
@@ -56,13 +58,35 @@ function formatFullDate(iso) {
 /* ------------------------------------------------------------------ */
 
 // Mirrors DURATION_PRESETS in google-apps-script/Code.gs, which owns the
-// actual start time and Jira-format time spent — the client only needs
-// the display text for the hint under each preset.
+// actual start time and Jira-format time spent. The client only needs
+// display text plus the day/hour split for the running total.
 const DURATION_PRESETS = {
-  "1d": { label: "1 Day", rangeText: "Starts 8:00 AM · logs 1d in Jira" },
-  "1st-half": { label: "1st Half", rangeText: "Starts 8:00 AM · logs 5h in Jira" },
-  "2nd-half": { label: "2nd Half", rangeText: "Starts 2:00 PM · logs 5h in Jira" },
+  "1d": { hint: "Starts 8:00 AM · logs 1d in Jira", days: 1, hours: 0 },
+  "1st-half": { hint: "Starts 8:00 AM · logs 5h in Jira", days: 0, hours: 5 },
+  "2nd-half": { hint: "Starts 2:00 PM · logs 5h in Jira", days: 0, hours: 5 },
 };
+
+// Total in Jira notation, e.g. "1d 5h". Days and hours are kept separate
+// on purpose: Jira treats 1d as 8h, so folding hours into days here would
+// misstate what actually gets logged.
+function formatJiraTotal(entries) {
+  let days = 0;
+  let hours = 0;
+  for (const entry of entries) {
+    const preset = DURATION_PRESETS[entry.duration];
+    if (!preset) continue;
+    days += preset.days;
+    hours += preset.hours;
+  }
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  return parts.length ? parts.join(" ") : "—";
+}
+
+function normalizeTicket(value) {
+  return String(value || "").trim().toUpperCase();
+}
 
 function uid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -89,6 +113,7 @@ let state = {
 const el = {
   weekday: document.getElementById("weekday"),
   fullDate: document.getElementById("full-date"),
+  dateBadge: document.getElementById("date-badge"),
   changeDateBtn: document.getElementById("change-date-btn"),
   datePickerWrap: document.getElementById("date-picker-wrap"),
   dateInput: document.getElementById("date-input"),
@@ -97,53 +122,86 @@ const el = {
   offlineBanner: document.getElementById("offline-banner"),
   syncBanner: document.getElementById("sync-banner"),
   formView: document.getElementById("form-view"),
+  entryCount: document.getElementById("entry-count"),
   taskList: document.getElementById("task-list"),
   addTaskBtn: document.getElementById("add-task-btn"),
   formError: document.getElementById("form-error"),
+  totalDisplay: document.getElementById("total-display"),
   saveBtn: document.getElementById("save-btn"),
+  saveBtnLabel: document.querySelector("#save-btn .btn-label"),
   taskTemplate: document.getElementById("task-template"),
   confirmationView: document.getElementById("confirmation-view"),
   confirmHeading: document.getElementById("confirm-heading"),
   confirmDate: document.getElementById("confirm-date"),
   confirmCount: document.getElementById("confirm-count"),
+  confirmTotal: document.getElementById("confirm-total"),
   confirmNote: document.getElementById("confirm-note"),
   doneBtn: document.getElementById("done-btn"),
 };
 
 /* ------------------------------------------------------------------ */
-/* Draft persistence (per date) — protects against a closed tab/browser */
+/* Local storage helpers                                               */
 /* ------------------------------------------------------------------ */
+
+function readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function writeJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    /* storage unavailable — persistence is best-effort only */
+  }
+}
+
+function removeKey(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+/* Draft persistence (per date) — protects against a closed tab/browser */
 
 function draftKey(dateIso) {
   return STORAGE_KEYS.draftPrefix + dateIso;
 }
 
 function saveDraft() {
-  try {
-    localStorage.setItem(draftKey(state.date), JSON.stringify(state.entries));
-  } catch (e) {
-    /* storage unavailable — draft persistence is best-effort only */
-  }
+  writeJSON(draftKey(state.date), state.entries);
 }
 
 function loadDraft(dateIso) {
-  try {
-    const raw = localStorage.getItem(draftKey(dateIso));
-    if (!raw) return null;
-    const entries = JSON.parse(raw);
-    if (Array.isArray(entries) && entries.length) return entries;
-  } catch (e) {
-    /* ignore corrupt draft */
-  }
-  return null;
+  const entries = readJSON(draftKey(dateIso), null);
+  return Array.isArray(entries) && entries.length ? entries : null;
 }
 
 function clearDraft(dateIso) {
-  try {
-    localStorage.removeItem(draftKey(dateIso));
-  } catch (e) {
-    /* ignore */
+  removeKey(draftKey(dateIso));
+}
+
+/* Recent tickets — one-tap re-use of what you've logged before */
+
+function getRecentTickets() {
+  const list = readJSON(STORAGE_KEYS.recentTickets, []);
+  return Array.isArray(list) ? list : [];
+}
+
+function rememberTickets(entries) {
+  let recent = getRecentTickets();
+  for (const entry of entries) {
+    const ticket = normalizeTicket(entry.ticket);
+    if (!ticket) continue;
+    recent = [ticket].concat(recent.filter((t) => t !== ticket));
   }
+  writeJSON(STORAGE_KEYS.recentTickets, recent.slice(0, CONFIG.MAX_RECENT_TICKETS));
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,16 +211,22 @@ function clearDraft(dateIso) {
 function renderHeader() {
   el.weekday.textContent = formatWeekday(state.date);
   el.fullDate.textContent = formatFullDate(state.date);
+  const isToday = state.date === todayISO();
+  el.dateBadge.textContent = isToday ? "Today" : "Backdated";
+  el.dateBadge.classList.toggle("is-backdated", !isToday);
 }
 
 function renderTaskList() {
   el.taskList.innerHTML = "";
+  const recent = getRecentTickets();
+
   state.entries.forEach((entry, index) => {
     const node = el.taskTemplate.content.firstElementChild.cloneNode(true);
     node.dataset.id = entry.id;
-    node.querySelector(".task-number").textContent = `Task ${index + 1}`;
+    node.querySelector(".task-number").textContent = `Entry ${index + 1}`;
 
     const ticketInput = node.querySelector(".task-ticket");
+    const recentWrap = node.querySelector(".recent-tickets");
     const durationInputs = node.querySelectorAll(".task-duration-input");
     const durationHint = node.querySelector(".duration-time-hint");
     const removeBtn = node.querySelector(".remove-task-btn");
@@ -170,8 +234,10 @@ function renderTaskList() {
     ticketInput.value = entry.ticket;
     ticketInput.addEventListener("input", () => {
       entry.ticket = ticketInput.value;
+      renderRecentChips(recentWrap, recent, entry, ticketInput);
       saveDraft();
     });
+    renderRecentChips(recentWrap, recent, entry, ticketInput);
 
     durationInputs.forEach((input) => {
       input.name = `duration-${entry.id}`;
@@ -179,6 +245,7 @@ function renderTaskList() {
       input.addEventListener("change", () => {
         entry.duration = input.value;
         updateDurationHint(durationHint, entry.duration);
+        updateTotals();
         saveDraft();
       });
     });
@@ -189,11 +256,42 @@ function renderTaskList() {
 
     el.taskList.appendChild(node);
   });
+
+  updateTotals();
+}
+
+function renderRecentChips(wrap, recent, entry, ticketInput) {
+  const current = normalizeTicket(entry.ticket);
+  const options = recent.filter((t) => t !== current);
+  wrap.innerHTML = "";
+  if (!options.length) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  options.forEach((ticket) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = ticket;
+    chip.addEventListener("click", () => {
+      entry.ticket = ticket;
+      ticketInput.value = ticket;
+      renderRecentChips(wrap, recent, entry, ticketInput);
+      saveDraft();
+    });
+    wrap.appendChild(chip);
+  });
 }
 
 function updateDurationHint(durationHint, durationKey) {
   const preset = DURATION_PRESETS[durationKey];
-  durationHint.textContent = preset ? preset.rangeText : "";
+  durationHint.textContent = preset ? preset.hint : "Pick how long you worked on it.";
+}
+
+function updateTotals() {
+  el.entryCount.textContent = String(state.entries.length);
+  el.totalDisplay.textContent = formatJiraTotal(state.entries);
 }
 
 function render() {
@@ -210,7 +308,10 @@ function addTask() {
   render();
   saveDraft();
   const lastCard = el.taskList.lastElementChild;
-  if (lastCard) lastCard.querySelector(".task-ticket").focus();
+  if (lastCard) {
+    lastCard.querySelector(".task-ticket").focus();
+    lastCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 function removeTask(id) {
@@ -235,23 +336,26 @@ function switchToDate(newDate) {
   render();
 }
 
+function setDatePickerOpen(open) {
+  el.changeDateBtn.setAttribute("aria-expanded", String(open));
+  el.datePickerWrap.hidden = !open;
+  if (open) {
+    el.dateInput.value = state.date;
+    el.dateInput.focus();
+  }
+}
+
 el.changeDateBtn.addEventListener("click", () => {
   const expanded = el.changeDateBtn.getAttribute("aria-expanded") === "true";
-  el.changeDateBtn.setAttribute("aria-expanded", String(!expanded));
-  el.datePickerWrap.hidden = expanded;
-  if (!expanded) el.dateInput.value = state.date;
+  setDatePickerOpen(!expanded);
 });
 
-el.dateCancelBtn.addEventListener("click", () => {
-  el.datePickerWrap.hidden = true;
-  el.changeDateBtn.setAttribute("aria-expanded", "false");
-});
+el.dateCancelBtn.addEventListener("click", () => setDatePickerOpen(false));
 
 el.dateConfirmBtn.addEventListener("click", () => {
   if (!el.dateInput.value) return;
   switchToDate(el.dateInput.value);
-  el.datePickerWrap.hidden = true;
-  el.changeDateBtn.setAttribute("aria-expanded", "false");
+  setDatePickerOpen(false);
 });
 
 el.addTaskBtn.addEventListener("click", addTask);
@@ -263,16 +367,16 @@ el.addTaskBtn.addEventListener("click", addTask);
 function validateEntries(entries) {
   const errors = [];
   if (entries.length === 0) {
-    errors.push("Add at least one task.");
+    errors.push("Add at least one entry.");
     return errors;
   }
   entries.forEach((entry, index) => {
-    const label = `Task ${index + 1}`;
-    if (!entry.ticket || !entry.ticket.trim()) {
+    const label = `Entry ${index + 1}`;
+    if (!normalizeTicket(entry.ticket)) {
       errors.push(`${label}: ticket is required.`);
     }
     if (!DURATION_PRESETS[entry.duration]) {
-      errors.push(`${label}: pick a duration (1 Day, 1st Half, or 2nd Half).`);
+      errors.push(`${label}: pick 1 Day, 1st Half, or 2nd Half.`);
     }
   });
   return errors;
@@ -283,20 +387,12 @@ function validateEntries(entries) {
 /* ------------------------------------------------------------------ */
 
 function readQueue() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.pendingQueue);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
+  const queue = readJSON(STORAGE_KEYS.pendingQueue, []);
+  return Array.isArray(queue) ? queue : [];
 }
 
 function writeQueue(queue) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.pendingQueue, JSON.stringify(queue));
-  } catch (e) {
-    /* ignore */
-  }
+  writeJSON(STORAGE_KEYS.pendingQueue, queue);
 }
 
 function enqueuePending(payload) {
@@ -306,8 +402,7 @@ function enqueuePending(payload) {
 }
 
 function removeFromQueue(submissionId) {
-  const queue = readQueue().filter((p) => p.submissionId !== submissionId);
-  writeQueue(queue);
+  writeQueue(readQueue().filter((p) => p.submissionId !== submissionId));
 }
 
 /* ------------------------------------------------------------------ */
@@ -319,7 +414,7 @@ function buildPayload(dateIso, entries, submissionId) {
     submissionId,
     date: dateIso,
     entries: entries.map((e) => ({
-      ticket: e.ticket.trim(),
+      ticket: normalizeTicket(e.ticket),
       duration: e.duration,
     })),
   };
@@ -368,18 +463,19 @@ function hideFormError() {
 
 function setSaving(isSaving) {
   el.saveBtn.disabled = isSaving;
-  el.saveBtn.textContent = isSaving ? "Saving…" : "Save Worklog";
+  el.saveBtnLabel.textContent = isSaving ? "Saving…" : "Save Worklog";
 }
 
-function showConfirmation({ dateIso, count, offline, duplicate }) {
+function showConfirmation({ dateIso, entries, offline, duplicate }) {
   el.formView.hidden = true;
   el.confirmationView.hidden = false;
   el.confirmHeading.textContent = offline ? "Worklog queued" : "Worklog saved";
   el.confirmDate.textContent = formatFullDate(dateIso);
-  el.confirmCount.textContent = String(count);
+  el.confirmCount.textContent = String(entries.length);
+  el.confirmTotal.textContent = formatJiraTotal(entries);
   if (offline) {
     el.confirmNote.hidden = false;
-    el.confirmNote.textContent = "You're offline — this worklog is saved on your phone and will sync to the sheet automatically once you're back online.";
+    el.confirmNote.textContent = "You're offline. This worklog is saved on your phone and will sync to the sheet automatically once you're back online.";
   } else if (duplicate) {
     el.confirmNote.hidden = false;
     el.confirmNote.textContent = "This worklog was already saved earlier.";
@@ -410,12 +506,18 @@ async function handleSave() {
   }
 
   const submissionId = `${state.date}-${uid()}`;
-  const payload = buildPayload(state.date, state.entries, submissionId);
+  const entries = state.entries.map((e) => ({ ...e, ticket: normalizeTicket(e.ticket) }));
+  const payload = buildPayload(state.date, entries, submissionId);
+
+  const finishLocally = (offline, duplicate) => {
+    rememberTickets(entries);
+    clearDraft(state.date);
+    showConfirmation({ dateIso: state.date, entries, offline, duplicate });
+  };
 
   if (!navigator.onLine) {
     enqueuePending(payload);
-    clearDraft(state.date);
-    showConfirmation({ dateIso: state.date, count: state.entries.length, offline: true });
+    finishLocally(true, false);
     return;
   }
 
@@ -423,20 +525,14 @@ async function handleSave() {
   try {
     const result = await postWorklog(payload);
     if (result && result.success) {
-      clearDraft(state.date);
-      showConfirmation({
-        dateIso: state.date,
-        count: state.entries.length,
-        duplicate: !!result.duplicate,
-      });
+      finishLocally(false, !!result.duplicate);
     } else {
       showFormError((result && result.message) || "Could not save your worklog.");
     }
   } catch (err) {
     // Network-ish failure: queue it instead of losing the data.
     enqueuePending(payload);
-    clearDraft(state.date);
-    showConfirmation({ dateIso: state.date, count: state.entries.length, offline: true });
+    finishLocally(true, false);
   } finally {
     setSaving(false);
   }
@@ -475,7 +571,7 @@ async function syncPendingQueue() {
   }
 
   if (syncedCount > 0) {
-    el.syncBanner.textContent = "Worklog saved.";
+    el.syncBanner.textContent = "Queued worklog saved to the sheet.";
     setTimeout(() => {
       el.syncBanner.hidden = true;
     }, 3000);

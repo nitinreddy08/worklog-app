@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Worklog</title>
   <meta name="description" content="Log today's work and send it straight to Google Sheets.">
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="theme-color" content="#eef1f6">
   <meta name="color-scheme" content="light">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,88 +16,140 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app">
-    <header class="app-header">
-      <h1>Worklog</h1>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 11.5V4h7.5l9.5 9.5-7.5 7.5L3 11.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7.5" cy="8.5" r="1.4" fill="currentColor"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-sunrise" viewBox="0 0 24 24"><path d="M4 18h16M6.5 14a5.5 5.5 0 0 1 11 0M12 3v4M8.5 5l1.5 1.5M15.5 5 14 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-sunset" viewBox="0 0 24 24"><path d="M4 18h16M6.5 14a5.5 5.5 0 0 1 11 0M12 7V3M9.5 5.5 12 3l2.5 2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0M12 19h.01M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
 
-      <div class="date-display">
-        <div id="weekday">—</div>
-        <div id="full-date">—</div>
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"><svg class="icon"><use href="#i-logo"/></svg></span>
+        <span class="brand-name">Worklog</span>
       </div>
-
-      <button id="change-date-btn" class="link-btn" type="button" aria-expanded="false" aria-controls="date-picker-wrap">
-        Log another date
+      <button id="change-date-btn" class="icon-btn" type="button" aria-expanded="false" aria-controls="date-picker-wrap" aria-label="Log another date" title="Log another date">
+        <svg class="icon"><use href="#i-calendar"/></svg>
       </button>
-
-      <div id="date-picker-wrap" class="date-picker-wrap" hidden>
-        <label for="date-input">Date</label>
-        <input type="date" id="date-input">
-        <div class="date-picker-actions">
-          <button id="date-confirm-btn" type="button" class="secondary-btn">Use this date</button>
-          <button id="date-cancel-btn" type="button" class="text-btn">Cancel</button>
-        </div>
-      </div>
     </header>
 
+    <section class="date-hero" aria-live="polite">
+      <div class="date-hero-top">
+        <span id="weekday" class="date-weekday">—</span>
+        <span id="date-badge" class="date-badge">Today</span>
+      </div>
+      <h1 id="full-date" class="date-title">—</h1>
+    </section>
+
+    <div id="date-picker-wrap" class="date-picker" hidden>
+      <label for="date-input" class="field-caption">Log work for another date</label>
+      <input type="date" id="date-input">
+      <div class="date-picker-actions">
+        <button id="date-confirm-btn" type="button" class="btn btn-secondary">Use this date</button>
+        <button id="date-cancel-btn" type="button" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+
     <div id="offline-banner" class="banner banner-warning" role="status" hidden>
-      Offline — worklog will be saved when you're back online.
+      <svg class="icon"><use href="#i-wifi-off"/></svg>
+      <span>Offline — your worklog will be saved when you're back online.</span>
     </div>
     <div id="sync-banner" class="banner banner-info" role="status" hidden></div>
 
-    <main id="form-view">
-      <h2 class="section-title">Today's Worklog</h2>
+    <main id="form-view" class="form-view">
+      <div class="section-head">
+        <h2 class="section-title">Entries</h2>
+        <span id="entry-count" class="count-pill">1</span>
+      </div>
 
-      <ul id="task-list" aria-label="Work tasks"></ul>
+      <ul id="task-list" class="task-list" aria-label="Work entries"></ul>
 
-      <button id="add-task-btn" class="secondary-btn add-task-btn" type="button">+ Add another task</button>
+      <button id="add-task-btn" class="btn btn-dashed" type="button">
+        <svg class="icon"><use href="#i-plus"/></svg>
+        <span>Add another entry</span>
+      </button>
 
-      <div id="form-error" class="error-banner" role="alert" hidden></div>
+      <div id="form-error" class="banner banner-error" role="alert" hidden></div>
 
-      <button id="save-btn" class="primary-btn" type="button">Save Worklog</button>
+      <div class="summary-bar">
+        <div class="summary-total">
+          <span class="summary-label">Total time spent</span>
+          <span id="total-display" class="summary-value">—</span>
+        </div>
+        <button id="save-btn" class="btn btn-primary" type="button">
+          <span class="btn-label">Save Worklog</span>
+          <svg class="icon"><use href="#i-arrow"/></svg>
+        </button>
+      </div>
     </main>
 
-    <section id="confirmation-view" class="confirmation-view" hidden aria-live="polite">
-      <div class="confirm-icon" aria-hidden="true">✓</div>
-      <h2 id="confirm-heading">Worklog saved</h2>
+    <section id="confirmation-view" class="confirmation" hidden aria-live="polite">
+      <div class="confirm-icon" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></div>
+      <h2 id="confirm-heading" class="confirm-title">Worklog saved</h2>
+      <p id="confirm-note" class="confirm-note" hidden></p>
       <dl class="confirm-details">
         <div><dt>Date</dt><dd id="confirm-date"></dd></div>
         <div><dt>Entries</dt><dd id="confirm-count"></dd></div>
+        <div><dt>Time spent</dt><dd id="confirm-total"></dd></div>
       </dl>
-      <p id="confirm-note" class="confirm-note" hidden></p>
-      <button id="done-btn" class="primary-btn" type="button">Done</button>
+      <button id="done-btn" class="btn btn-primary" type="button">
+        <span class="btn-label">Done</span>
+      </button>
     </section>
   </div>
 
   <template id="task-template">
     <li class="task-card">
       <div class="task-card-header">
-        <span class="task-number"></span>
-        <button type="button" class="remove-task-btn" aria-label="Remove this task">✕</button>
+        <span class="task-number">Entry 1</span>
+        <button type="button" class="icon-btn icon-btn-sm remove-task-btn" aria-label="Remove this entry" title="Remove">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
       </div>
 
-      <label class="field-label">
-        Ticket
-        <input type="text" class="task-ticket" placeholder="e.g. PROJ-123" maxlength="50" autocomplete="off">
+      <label class="field">
+        <span class="field-caption">Ticket</span>
+        <span class="input-wrap">
+          <svg class="icon input-icon"><use href="#i-tag"/></svg>
+          <input type="text" class="task-ticket" placeholder="PROJ-123" maxlength="50" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+        </span>
       </label>
+      <div class="recent-tickets" hidden></div>
 
       <fieldset class="duration-fieldset">
-        <legend>Time spent</legend>
-        <div class="duration-options">
+        <legend class="field-caption">Time spent</legend>
+        <div class="duration-options" role="radiogroup">
           <label class="duration-option">
             <input type="radio" class="task-duration-input" value="1d">
-            <span>1 Day</span>
+            <svg class="icon"><use href="#i-sun"/></svg>
+            <span class="duration-label">1 Day</span>
+            <span class="duration-sub">1d</span>
           </label>
           <label class="duration-option">
             <input type="radio" class="task-duration-input" value="1st-half">
-            <span>1st Half</span>
+            <svg class="icon"><use href="#i-sunrise"/></svg>
+            <span class="duration-label">1st Half</span>
+            <span class="duration-sub">5h</span>
           </label>
           <label class="duration-option">
             <input type="radio" class="task-duration-input" value="2nd-half">
-            <span>2nd Half</span>
+            <svg class="icon"><use href="#i-sunset"/></svg>
+            <span class="duration-label">2nd Half</span>
+            <span class="duration-sub">5h</span>
           </label>
         </div>
         <div class="duration-time-hint"></div>
