@@ -38,17 +38,10 @@ automatically.
 ### Note on subpaths
 
 GitHub Pages project sites are served from a subpath
-(`/<repo-name>/`), not the domain root. This project's `manifest.webmanifest`
-sets `"start_url": "/"` and `"scope": "/"`, which assumes root hosting.
-If you deploy under a subpath, update both to the subpath, e.g.:
-
-```json
-"start_url": "/worklog-app/",
-"scope": "/worklog-app/",
-```
-
-(If you instead deploy to a custom domain or Cloudflare Pages root, no
-change is needed — see Option B.)
+(`/<repo-name>/`), not the domain root. This project's
+`manifest.webmanifest` uses relative paths (`"start_url": "./"`,
+`"scope": "./"`), which resolve correctly under a subpath or at a
+domain root — no changes needed either way.
 
 ## Option B: Cloudflare Pages (root domain, no subpath issues)
 
