@@ -8,7 +8,7 @@ const CONFIG = {
   // Paste the Web App URL you get after deploying the Apps Script
   // (see google-apps-script/README.md). Leaving this unset lets you load
   // the app to look around, but Save will fail until it's configured.
-  APPS_SCRIPT_URL: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE",
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxkbbDFkc6vqI2ANKFn-yOqaSMcuisVccuahltuElU2oKEPMH8HhoN6gLajsZbnw64M/exec",
   // Optional. Only needed if you set API_SECRET in the Apps Script's
   // Script Properties. See google-apps-script/README.md for why this is
   // a weak, best-effort filter rather than real authentication.
