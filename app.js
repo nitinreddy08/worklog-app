@@ -547,6 +547,30 @@ function withTimeout(run) {
   return run(controller.signal).finally(() => clearTimeout(timer));
 }
 
+// Apps Script answers with JSON on success but can answer with an HTML
+// page when the deployment is misconfigured; surface that clearly instead
+// of a raw "Unexpected token <".
+async function readJSONResponse(res) {
+  if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    const err = new Error("The sheet script sent an unexpected response — check the Apps Script deployment (Execute as: Me, Access: Anyone).");
+    err.name = "BadResponse";
+    throw err;
+  }
+}
+
+// One place to turn a thrown error into a sentence a user can act on.
+function describeError(err) {
+  if (!err) return "Something went wrong.";
+  if (err.name === "AbortError") return "The sheet took too long to respond. Try again.";
+  if (err.name === "BadResponse") return err.message;
+  if (err.name === "TypeError") return "Could not reach the sheet. Check your connection.";
+  return err.message || "Something went wrong.";
+}
+
 async function postJSON(body) {
   if (CONFIG.API_SECRET) body.apiSecret = CONFIG.API_SECRET;
   return withTimeout(async (signal) => {
@@ -558,8 +582,7 @@ async function postJSON(body) {
       body: JSON.stringify(body),
       signal,
     });
-    if (!res.ok) throw new Error(`Server responded with ${res.status}`);
-    return res.json();
+    return readJSONResponse(res);
   });
 }
 
@@ -568,8 +591,7 @@ async function getJSON(params) {
   if (CONFIG.API_SECRET) query.set("key", CONFIG.API_SECRET);
   return withTimeout(async (signal) => {
     const res = await fetch(`${CONFIG.APPS_SCRIPT_URL}?${query.toString()}`, { method: "GET", signal });
-    if (!res.ok) throw new Error(`Server responded with ${res.status}`);
-    return res.json();
+    return readJSONResponse(res);
   });
 }
 
@@ -698,8 +720,12 @@ async function loadLogPage(page) {
   }
   el.logOffline.hidden = navigator.onLine;
   if (!navigator.onLine) {
+    setLogState({ loading: false });
     el.logBody.innerHTML = "";
     el.logEmpty.hidden = true;
+    el.logOlder.disabled = true;
+    el.logNewer.disabled = true;
+    el.logPageInfo.textContent = "Offline";
     return;
   }
 
@@ -730,7 +756,7 @@ async function loadLogPage(page) {
     setLogState({ loading: false });
     renderLog();
   } catch (err) {
-    setLogState({ loading: false, error: err.name === "AbortError" ? "The sheet took too long to respond. Try again." : err.message });
+    setLogState({ loading: false, error: describeError(err) });
   }
 }
 
@@ -881,16 +907,18 @@ function openConfirm({ text, okLabel, onOk }) {
 el.confirmModalOk.addEventListener("click", async () => {
   if (!confirmHandler) return;
   const handler = confirmHandler;
+  const label = el.confirmModalOkLabel.textContent;
   el.confirmModalOk.disabled = true;
   el.confirmModalOkLabel.textContent = "Working…";
   try {
     await handler();
+    confirmHandler = null; // done — only cleared on success so a failed attempt can be retried
     closeModal(el.confirmModal);
   } catch (err) {
-    showToast(err.name === "AbortError" ? "The sheet took too long to respond." : "Could not reach the sheet.", true);
+    showToast(describeError(err), true);
   } finally {
     el.confirmModalOk.disabled = false;
-    confirmHandler = null;
+    el.confirmModalOkLabel.textContent = label;
   }
 });
 
@@ -959,11 +987,21 @@ el.editSaveBtn.addEventListener("click", async () => {
       showEditError((result && result.message) || "Could not update the entry.");
     }
   } catch (err) {
-    showEditError(err.name === "AbortError" ? "The sheet took too long to respond." : "Could not reach the sheet. Check your connection.");
+    showEditError(describeError(err));
   } finally {
     el.editSaveBtn.disabled = false;
     el.editSaveLabel.textContent = "Save changes";
   }
+});
+
+// Enter in a text field of the editor saves, like a form would.
+[el.editTicket, el.editSpent].forEach((input) => {
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      el.editSaveBtn.click();
+    }
+  });
 });
 
 el.editDeleteBtn.addEventListener("click", () => {

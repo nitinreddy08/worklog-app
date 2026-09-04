@@ -204,10 +204,18 @@ function handleMerge_(config, payload) {
 
   var sheet = getSheet_(config);
   var located = [];
+  var seenRows = {};
   for (var i = 0; i < targets.length; i++) {
     var result = locateTarget_(sheet, targets[i]);
     if (!result.ok) return jsonResponse_(result.error);
+    // The same row listed twice would otherwise be deleted twice, taking
+    // an unrelated row with it.
+    if (seenRows[result.rowNumber]) continue;
+    seenRows[result.rowNumber] = true;
     located.push(result);
+  }
+  if (located.length < 2) {
+    return jsonResponse_({ success: false, message: "Select at least two different entries to merge." });
   }
 
   var ticket = located[0].values.ticket;
@@ -217,15 +225,21 @@ function handleMerge_(config, payload) {
     }
   }
 
-  // Keep the earliest date/start; add up every time spent.
+  // Keep the earliest date/start; add up every time spent. Refuse rather
+  // than silently drop a duration we can't read (e.g. a legacy "1:00").
   var earliest = located[0].values;
   var total = emptyDuration_();
-  located.forEach(function (item) {
+  for (var k = 0; k < located.length; k++) {
+    var item = located[k];
+    var parsed = parseDuration_(item.values.timeSpent);
+    if (!parsed) {
+      return jsonResponse_({ success: false, message: "Entry on " + item.values.dateIso + " has time spent \"" + item.values.timeSpent + "\", which isn't in Jira format. Edit it first, then merge." });
+    }
     if (sortKey_(item.values.dateKey, item.values.startMinutes) < sortKey_(earliest.dateKey, earliest.startMinutes)) {
       earliest = item.values;
     }
-    addDuration_(total, parseDuration_(item.values.timeSpent));
-  });
+    addDuration_(total, parsed);
+  }
 
   // Delete bottom-up so earlier row numbers stay valid.
   located.sort(function (a, b) { return b.rowNumber - a.rowNumber; });
@@ -662,8 +676,23 @@ function insertEntry_(sheet, entry) {
 // Deletes one data row, then removes its month section entirely if that
 // left the section with no data rows.
 function deleteDataRow_(sheet, rowNumber) {
+  // Remember which month this row belonged to so its alternating shading
+  // can be re-applied once the row is gone.
+  var owner = null;
+  findMonthSections_(sheet).forEach(function (s) {
+    if (rowNumber >= s.dataStartRow && rowNumber <= s.dataEndRow) owner = { year: s.year, month: s.month };
+  });
+
   sheet.deleteRow(rowNumber);
   removeEmptySections_(sheet);
+
+  if (owner) {
+    findMonthSections_(sheet).forEach(function (s) {
+      if (s.year === owner.year && s.month === owner.month && s.dataEndRow >= s.dataStartRow) {
+        styleDataRows_(sheet, s.dataStartRow, s.dataEndRow - s.dataStartRow + 1);
+      }
+    });
+  }
 }
 
 function removeEmptySections_(sheet) {
@@ -800,14 +829,21 @@ function styleHeaderRow_(sheet, row) {
     .setBorder(true, true, true, true, true, false, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID);
 }
 
+// Styles a block of data rows in a handful of batched calls rather than
+// several per row — a month of entries restyles in well under a second.
 function styleDataRows_(sheet, startRow, count) {
+  if (count <= 0) return;
+  var backgrounds = [];
   for (var i = 0; i < count; i++) {
     var bg = i % 2 === 0 ? "#FFFFFF" : ALT_ROW_BG_COLOR;
-    sheet.getRange(startRow + i, 1, 1, NUM_COLUMNS)
-      .setBackground(bg)
-      .setFontWeight("normal")
-      .setFontColor("#000000")
-      .setBorder(true, true, true, true, true, false, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID)
-      .setHorizontalAlignment("center");
+    var row = [];
+    for (var c = 0; c < NUM_COLUMNS; c++) row.push(bg);
+    backgrounds.push(row);
   }
+  sheet.getRange(startRow, 1, count, NUM_COLUMNS)
+    .setBackgrounds(backgrounds)
+    .setFontWeight("normal")
+    .setFontColor("#000000")
+    .setHorizontalAlignment("center")
+    .setBorder(true, true, true, true, true, true, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID);
 }
