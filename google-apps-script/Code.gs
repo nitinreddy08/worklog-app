@@ -13,14 +13,21 @@
  *   Date | Start Time | End Time | Duration | Work Description
  *   ...
  *
- * Configuration lives in Script Properties (Project Settings > Script
- * properties), never hard-coded here:
+ * Configuration is read from Script Properties (Project Settings >
+ * Script properties) first:
  *   SPREADSHEET_ID  - required, the target spreadsheet's ID
  *   SHEET_NAME      - optional, defaults to "Worklog"
  *   API_SECRET      - optional, see the security note in the README
  *
+ * If SPREADSHEET_ID isn't found there, DEFAULT_SPREADSHEET_ID below is
+ * used instead. Script Properties are the recommended place to keep it,
+ * but this fallback exists so a fresh setup still works if that step
+ * gets missed or the wrong key name is typed.
+ *
  * See README.md in this folder for full setup instructions.
  */
+
+var DEFAULT_SPREADSHEET_ID = "1004yO9edlMlXGR5owYCGcdVfFYR3h33GokAVEUnlSfs";
 
 var HEADER_ROW = ["Date", "Start Time", "End Time", "Duration", "Work Description"];
 
@@ -97,9 +104,9 @@ function doPost(e) {
 
 function getConfig_() {
   var props = PropertiesService.getScriptProperties();
-  var spreadsheetId = props.getProperty("SPREADSHEET_ID");
+  var spreadsheetId = props.getProperty("SPREADSHEET_ID") || DEFAULT_SPREADSHEET_ID;
   if (!spreadsheetId) {
-    throw new Error("SPREADSHEET_ID is not configured in Script Properties.");
+    throw new Error("SPREADSHEET_ID is not configured. Set it in Script Properties, or set DEFAULT_SPREADSHEET_ID at the top of Code.gs.");
   }
   return {
     spreadsheetId: spreadsheetId,

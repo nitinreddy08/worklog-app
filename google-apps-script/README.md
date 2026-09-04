@@ -31,7 +31,10 @@ backend for the Worklog PWA. You only need to do this once.
 
 ## 3. Configure Script Properties
 
-Do **not** hard-code the spreadsheet ID in the script. Instead:
+Prefer Script Properties over editing the spreadsheet ID directly into
+the script. (If this step is skipped or mistyped, `Code.gs` falls back
+to the `DEFAULT_SPREADSHEET_ID` constant near the top of the file — set
+that instead if you'd rather not use Script Properties at all.)
 
 1. In the Apps Script editor, click the gear icon **Project Settings** on
    the left sidebar.
