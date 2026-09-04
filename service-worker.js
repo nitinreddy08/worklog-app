@@ -1,4 +1,4 @@
-const CACHE_NAME = "worklog-shell-v1";
+const CACHE_NAME = "worklog-shell-v2";
 
 const SHELL_FILES = [
   "./",
@@ -36,19 +36,20 @@ self.addEventListener("fetch", (event) => {
   // Never intercept the Apps Script API calls — those must always hit the
   // network so save/sync behaves correctly.
   if (request.method !== "GET") return;
+  if (new URL(request.url).origin !== self.location.origin) return;
 
+  // Network-first: always prefer the latest app shell when online (so a
+  // deploy takes effect on next load), falling back to the cached copy
+  // only when the network is unreachable.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request)
-        .then((response) => {
-          if (response.ok && new URL(request.url).origin === self.location.origin) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-    })
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });
