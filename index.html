@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Worklog</title>
+  <meta name="description" content="Log today's work and send it straight to Google Sheets.">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Worklog">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1>Worklog</h1>
+
+      <div class="date-display">
+        <div id="weekday">—</div>
+        <div id="full-date">—</div>
+      </div>
+
+      <button id="change-date-btn" class="link-btn" type="button" aria-expanded="false" aria-controls="date-picker-wrap">
+        Log another date
+      </button>
+
+      <div id="date-picker-wrap" class="date-picker-wrap" hidden>
+        <label for="date-input">Date</label>
+        <input type="date" id="date-input">
+        <div class="date-picker-actions">
+          <button id="date-confirm-btn" type="button" class="secondary-btn">Use this date</button>
+          <button id="date-cancel-btn" type="button" class="text-btn">Cancel</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="offline-banner" class="banner banner-warning" role="status" hidden>
+      Offline — worklog will be saved when you're back online.
+    </div>
+    <div id="sync-banner" class="banner banner-info" role="status" hidden></div>
+
+    <main id="form-view">
+      <h2 class="section-title">Today's Worklog</h2>
+
+      <ul id="task-list" aria-label="Work tasks"></ul>
+
+      <button id="add-task-btn" class="secondary-btn add-task-btn" type="button">+ Add another task</button>
+
+      <div id="form-error" class="error-banner" role="alert" hidden></div>
+
+      <div class="total-row">
+        <span>Total</span>
+        <span id="total-display">0h 0m</span>
+      </div>
+
+      <button id="save-btn" class="primary-btn" type="button">Save Worklog</button>
+    </main>
+
+    <section id="confirmation-view" class="confirmation-view" hidden aria-live="polite">
+      <div class="confirm-icon" aria-hidden="true">✓</div>
+      <h2 id="confirm-heading">Worklog saved</h2>
+      <dl class="confirm-details">
+        <div><dt>Date</dt><dd id="confirm-date"></dd></div>
+        <div><dt>Entries</dt><dd id="confirm-count"></dd></div>
+        <div><dt>Total</dt><dd id="confirm-total"></dd></div>
+      </dl>
+      <p id="confirm-note" class="confirm-note" hidden></p>
+      <button id="done-btn" class="primary-btn" type="button">Done</button>
+    </section>
+  </div>
+
+  <template id="task-template">
+    <li class="task-card">
+      <div class="task-card-header">
+        <span class="task-number"></span>
+        <button type="button" class="remove-task-btn" aria-label="Remove this task">✕</button>
+      </div>
+
+      <label class="field-label">
+        What did you work on?
+        <input type="text" class="task-description" placeholder="e.g. Fixed login bug" maxlength="200" autocomplete="off">
+      </label>
+
+      <div class="time-row">
+        <label class="field-label">
+          Start
+          <input type="time" class="task-start">
+        </label>
+        <label class="field-label">
+          End
+          <input type="time" class="task-end">
+        </label>
+      </div>
+
+      <div class="task-duration">Duration: <span class="duration-value">—</span></div>
+      <div class="task-error" role="alert" hidden></div>
+    </li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
