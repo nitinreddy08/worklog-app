@@ -5,12 +5,12 @@
  * appends it to a Google Sheet organised into calendar-month sections:
  *
  *   SEPTEMBER 2026
- *   Date | Start Time | End Time | Duration | Work Description
- *   04-09-2026 | 09:30 AM | 11:00 AM | 1:30 | Fixed login bug
+ *   Date | Start Time | End Time | Ticket
+ *   04-09-2026 | 09:30 AM | 11:00 AM | PROJ-123
  *   ...
  *   (3 blank rows)
  *   OCTOBER 2026
- *   Date | Start Time | End Time | Duration | Work Description
+ *   Date | Start Time | End Time | Ticket
  *   ...
  *
  * Configuration is read from Script Properties (Project Settings >
@@ -29,7 +29,8 @@
 
 var DEFAULT_SPREADSHEET_ID = "1004yO9edlMlXGR5owYCGcdVfFYR3h33GokAVEUnlSfs";
 
-var HEADER_ROW = ["Date", "Start Time", "End Time", "Duration", "Work Description"];
+var HEADER_ROW = ["Date", "Start Time", "End Time", "Ticket"];
+var NUM_COLUMNS = HEADER_ROW.length;
 
 var MONTH_NAMES = [
   "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -46,7 +47,7 @@ var HEADER_FONT_COLOR = "#FFFFFF";
 var MONTH_HEADING_BG_COLOR = "#E8EAF6";
 var ALT_ROW_BG_COLOR = "#F5F5F5";
 var BORDER_COLOR = "#D9D9D9";
-var COLUMN_WIDTHS = [110, 90, 90, 80, 350]; // Date, Start, End, Duration, Description
+var COLUMN_WIDTHS = [110, 100, 100, 150]; // Date, Start, End, Ticket
 
 /* ------------------------------------------------------------------ */
 /* Entry points                                                        */
@@ -154,8 +155,8 @@ function validatePayload_(payload) {
     if (!entry || typeof entry !== "object") {
       return { valid: false, message: label + " is invalid." };
     }
-    if (!entry.description || !String(entry.description).trim()) {
-      return { valid: false, message: label + ": description is required." };
+    if (!entry.ticket || !String(entry.ticket).trim()) {
+      return { valid: false, message: label + ": ticket is required." };
     }
     if (!isValidTime_(entry.startTime)) {
       return { valid: false, message: label + ": a valid start time (HH:MM) is required." };
@@ -284,13 +285,11 @@ function appendWorklog_(sheet, payload) {
   var monthLabel = MONTH_NAMES[month - 1] + " " + year;
 
   var dataRows = payload.entries.map(function (entry) {
-    var durationMinutes = timeToMinutes_(entry.endTime) - timeToMinutes_(entry.startTime);
     return [
       displayDate,
       formatTime12_(entry.startTime),
       formatTime12_(entry.endTime),
-      formatDurationString_(durationMinutes),
-      String(entry.description).trim(),
+      String(entry.ticket).trim(),
     ];
   });
 
@@ -301,7 +300,7 @@ function appendWorklog_(sheet, payload) {
     var section = decision.section;
     var existingDataRows = Math.max(0, section.dataEndRow - section.dataStartRow + 1);
     sheet.insertRowsAfter(section.dataEndRow, dataRows.length);
-    sheet.getRange(section.dataEndRow + 1, 1, dataRows.length, 5).setValues(dataRows);
+    sheet.getRange(section.dataEndRow + 1, 1, dataRows.length, NUM_COLUMNS).setValues(dataRows);
     styleDataRows_(sheet, section.dataEndRow + 1, dataRows.length, existingDataRows);
     return dataRows.length;
   }
@@ -326,15 +325,15 @@ function appendWorklog_(sheet, payload) {
 }
 
 function writeMonthBlock_(sheet, startRow, monthLabel, dataRows) {
-  sheet.getRange(startRow, 1, 1, 5).merge();
+  sheet.getRange(startRow, 1, 1, NUM_COLUMNS).merge();
   sheet.getRange(startRow, 1).setValue(monthLabel);
   styleMonthHeading_(sheet, startRow);
 
-  sheet.getRange(startRow + 1, 1, 1, 5).setValues([HEADER_ROW]);
+  sheet.getRange(startRow + 1, 1, 1, NUM_COLUMNS).setValues([HEADER_ROW]);
   styleHeaderRow_(sheet, startRow + 1);
 
   if (dataRows.length) {
-    sheet.getRange(startRow + 2, 1, dataRows.length, 5).setValues(dataRows);
+    sheet.getRange(startRow + 2, 1, dataRows.length, NUM_COLUMNS).setValues(dataRows);
     styleDataRows_(sheet, startRow + 2, dataRows.length, 0);
   }
 }
@@ -345,12 +344,6 @@ function writeMonthBlock_(sheet, startRow, monthLabel, dataRows) {
 
 function pad2_(n) {
   return (n < 10 ? "0" : "") + n;
-}
-
-function formatDurationString_(totalMinutes) {
-  var h = Math.floor(totalMinutes / 60);
-  var m = totalMinutes % 60;
-  return h + ":" + pad2_(m);
 }
 
 // "21:32" -> "09:32 PM"
@@ -378,7 +371,7 @@ function applyColumnWidths_(sheet) {
 }
 
 function styleMonthHeading_(sheet, row) {
-  sheet.getRange(row, 1, 1, 5)
+  sheet.getRange(row, 1, 1, NUM_COLUMNS)
     .setBackground(MONTH_HEADING_BG_COLOR)
     .setFontWeight("bold")
     .setFontSize(13)
@@ -388,7 +381,7 @@ function styleMonthHeading_(sheet, row) {
 }
 
 function styleHeaderRow_(sheet, row) {
-  sheet.getRange(row, 1, 1, 5)
+  sheet.getRange(row, 1, 1, NUM_COLUMNS)
     .setBackground(HEADER_BG_COLOR)
     .setFontColor(HEADER_FONT_COLOR)
     .setFontWeight("bold")
@@ -402,10 +395,9 @@ function styleDataRows_(sheet, startRow, count, bandOffset) {
     var isEven = (bandOffset + i) % 2 === 0;
     var bg = isEven ? "#FFFFFF" : ALT_ROW_BG_COLOR;
 
-    sheet.getRange(row, 1, 1, 5)
+    sheet.getRange(row, 1, 1, NUM_COLUMNS)
       .setBackground(bg)
-      .setBorder(true, true, true, true, true, false, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID);
-    sheet.getRange(row, 1, 1, 4).setHorizontalAlignment("center");
-    sheet.getRange(row, 5, 1, 1).setHorizontalAlignment("left");
+      .setBorder(true, true, true, true, true, false, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID)
+      .setHorizontalAlignment("center");
   }
 }

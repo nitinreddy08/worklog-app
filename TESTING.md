@@ -11,26 +11,24 @@ Run through this after setup and after any change to `app.js` or
 - [ ] 4. Removing a task removes it (last remaining task resets to blank
       instead of disappearing entirely).
 - [ ] 5. Start/End time pickers open the native Android time picker.
-- [ ] 6. Duration is calculated automatically and shown per task.
-- [ ] 7. Multiple tasks can be entered and edited independently.
-- [ ] 8. The "Total" at the bottom updates live as tasks change.
+- [ ] 6. Multiple tasks can be entered and edited independently.
 
 ## Validation
 
-- [ ] 9. Saving with an empty description shows an error and does not
+- [ ] 7. Saving with an empty ticket field shows an error and does not
       submit.
-- [ ] 10. Saving with a missing start or end time shows an error.
-- [ ] 11. Entering an end time before the start time shows "End time must
+- [ ] 8. Saving with a missing start or end time shows an error.
+- [ ] 9. Entering an end time before the start time shows "End time must
       be after start time" on that task and blocks save.
 
 ## Saving (online)
 
-- [ ] 12. Save button shows "Saving…" and disables while in flight.
-- [ ] 13. On success, the confirmation screen shows the correct date,
-      entry count, and total.
-- [ ] 14. Rows appear correctly in the Google Sheet: one row per task,
-      in `Date | Start Time | End Time | Duration | Work Description`
-      order.
+- [ ] 10. Save button shows "Saving…" and disables while in flight.
+- [ ] 11. On success, the confirmation screen shows the correct date and
+      entry count.
+- [ ] 12. Rows appear correctly in the Google Sheet: one row per task,
+      in `Date | Start Time | End Time | Ticket` order, with times shown
+      as 12-hour AM/PM (e.g. `09:30 AM`).
 - [ ] 15. Submitting a second, different worklog appends further rows
       without disturbing earlier ones.
 - [ ] 16. A month heading (`SEPTEMBER 2026`, etc.) appears once per

@@ -72,12 +72,6 @@ function computeDurationMinutes(start, end) {
   return e - s;
 }
 
-function formatDuration(mins) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${h}h ${m}m`;
-}
-
 function uid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -88,7 +82,7 @@ function uid() {
 /* ------------------------------------------------------------------ */
 
 function blankTask() {
-  return { id: uid(), description: "", start: "", end: "" };
+  return { id: uid(), ticket: "", start: "", end: "" };
 }
 
 let state = {
@@ -114,14 +108,12 @@ const el = {
   taskList: document.getElementById("task-list"),
   addTaskBtn: document.getElementById("add-task-btn"),
   formError: document.getElementById("form-error"),
-  totalDisplay: document.getElementById("total-display"),
   saveBtn: document.getElementById("save-btn"),
   taskTemplate: document.getElementById("task-template"),
   confirmationView: document.getElementById("confirmation-view"),
   confirmHeading: document.getElementById("confirm-heading"),
   confirmDate: document.getElementById("confirm-date"),
   confirmCount: document.getElementById("confirm-count"),
-  confirmTotal: document.getElementById("confirm-total"),
   confirmNote: document.getElementById("confirm-note"),
   doneBtn: document.getElementById("done-btn"),
 };
@@ -178,78 +170,47 @@ function renderTaskList() {
     node.dataset.id = entry.id;
     node.querySelector(".task-number").textContent = `Task ${index + 1}`;
 
-    const descInput = node.querySelector(".task-description");
+    const ticketInput = node.querySelector(".task-ticket");
     const startInput = node.querySelector(".task-start");
     const endInput = node.querySelector(".task-end");
-    const durationValue = node.querySelector(".duration-value");
     const taskError = node.querySelector(".task-error");
     const removeBtn = node.querySelector(".remove-task-btn");
 
-    descInput.value = entry.description;
+    ticketInput.value = entry.ticket;
     startInput.value = entry.start;
     endInput.value = entry.end;
+    updateTaskError(node, entry);
 
-    const duration = computeDurationMinutes(entry.start, entry.end);
-    if (duration === undefined) {
-      durationValue.textContent = "—";
-      taskError.textContent = "End time must be after start time.";
-      taskError.hidden = false;
-    } else if (duration === null) {
-      durationValue.textContent = "—";
-      taskError.hidden = true;
-    } else {
-      durationValue.textContent = formatDuration(duration);
-      taskError.hidden = true;
-    }
-
-    descInput.addEventListener("input", () => {
-      entry.description = descInput.value;
+    ticketInput.addEventListener("input", () => {
+      entry.ticket = ticketInput.value;
       saveDraft();
     });
     startInput.addEventListener("input", () => {
       entry.start = startInput.value;
-      updateSingleTask(node, entry);
-      updateTotal();
+      updateTaskError(node, entry);
       saveDraft();
     });
     endInput.addEventListener("input", () => {
       entry.end = endInput.value;
-      updateSingleTask(node, entry);
-      updateTotal();
+      updateTaskError(node, entry);
       saveDraft();
     });
     removeBtn.addEventListener("click", () => removeTask(entry.id));
-    removeBtn.disabled = state.entries.length === 1 && !entry.description && !entry.start && !entry.end;
+    removeBtn.disabled = state.entries.length === 1 && !entry.ticket && !entry.start && !entry.end;
 
     el.taskList.appendChild(node);
   });
-  updateTotal();
 }
 
-function updateSingleTask(node, entry) {
-  const durationValue = node.querySelector(".duration-value");
+function updateTaskError(node, entry) {
   const taskError = node.querySelector(".task-error");
   const duration = computeDurationMinutes(entry.start, entry.end);
   if (duration === undefined) {
-    durationValue.textContent = "—";
     taskError.textContent = "End time must be after start time.";
     taskError.hidden = false;
-  } else if (duration === null) {
-    durationValue.textContent = "—";
-    taskError.hidden = true;
   } else {
-    durationValue.textContent = formatDuration(duration);
     taskError.hidden = true;
   }
-}
-
-function updateTotal() {
-  let total = 0;
-  for (const entry of state.entries) {
-    const duration = computeDurationMinutes(entry.start, entry.end);
-    if (typeof duration === "number") total += duration;
-  }
-  el.totalDisplay.textContent = formatDuration(total);
 }
 
 function render() {
@@ -266,7 +227,7 @@ function addTask() {
   render();
   saveDraft();
   const lastCard = el.taskList.lastElementChild;
-  if (lastCard) lastCard.querySelector(".task-description").focus();
+  if (lastCard) lastCard.querySelector(".task-ticket").focus();
 }
 
 function removeTask(id) {
@@ -324,8 +285,8 @@ function validateEntries(entries) {
   }
   entries.forEach((entry, index) => {
     const label = `Task ${index + 1}`;
-    if (!entry.description || !entry.description.trim()) {
-      errors.push(`${label}: description is required.`);
+    if (!entry.ticket || !entry.ticket.trim()) {
+      errors.push(`${label}: ticket is required.`);
     }
     if (!entry.start) {
       errors.push(`${label}: start time is required.`);
@@ -384,7 +345,7 @@ function buildPayload(dateIso, entries, submissionId) {
     submissionId,
     date: dateIso,
     entries: entries.map((e) => ({
-      description: e.description.trim(),
+      ticket: e.ticket.trim(),
       startTime: e.start,
       endTime: e.end,
     })),
@@ -437,13 +398,12 @@ function setSaving(isSaving) {
   el.saveBtn.textContent = isSaving ? "Saving…" : "Save Worklog";
 }
 
-function showConfirmation({ dateIso, count, totalMinutes, offline, duplicate }) {
+function showConfirmation({ dateIso, count, offline, duplicate }) {
   el.formView.hidden = true;
   el.confirmationView.hidden = false;
   el.confirmHeading.textContent = offline ? "Worklog queued" : "Worklog saved";
   el.confirmDate.textContent = formatFullDate(dateIso);
   el.confirmCount.textContent = String(count);
-  el.confirmTotal.textContent = formatDuration(totalMinutes);
   if (offline) {
     el.confirmNote.hidden = false;
     el.confirmNote.textContent = "You're offline — this worklog is saved on your phone and will sync to the sheet automatically once you're back online.";
@@ -477,16 +437,12 @@ async function handleSave() {
   }
 
   const submissionId = `${state.date}-${uid()}`;
-  const totalMinutes = state.entries.reduce((sum, e) => {
-    const d = computeDurationMinutes(e.start, e.end);
-    return sum + (typeof d === "number" ? d : 0);
-  }, 0);
   const payload = buildPayload(state.date, state.entries, submissionId);
 
   if (!navigator.onLine) {
     enqueuePending(payload);
     clearDraft(state.date);
-    showConfirmation({ dateIso: state.date, count: state.entries.length, totalMinutes, offline: true });
+    showConfirmation({ dateIso: state.date, count: state.entries.length, offline: true });
     return;
   }
 
@@ -498,7 +454,6 @@ async function handleSave() {
       showConfirmation({
         dateIso: state.date,
         count: state.entries.length,
-        totalMinutes,
         duplicate: !!result.duplicate,
       });
     } else {
@@ -508,7 +463,7 @@ async function handleSave() {
     // Network-ish failure: queue it instead of losing the data.
     enqueuePending(payload);
     clearDraft(state.date);
-    showConfirmation({ dateIso: state.date, count: state.entries.length, totalMinutes, offline: true });
+    showConfirmation({ dateIso: state.date, count: state.entries.length, offline: true });
   } finally {
     setSaving(false);
   }

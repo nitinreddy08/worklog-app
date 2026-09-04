@@ -53,11 +53,6 @@
 
       <div id="form-error" class="error-banner" role="alert" hidden></div>
 
-      <div class="total-row">
-        <span>Total</span>
-        <span id="total-display">0h 0m</span>
-      </div>
-
       <button id="save-btn" class="primary-btn" type="button">Save Worklog</button>
     </main>
 
@@ -67,7 +62,6 @@
       <dl class="confirm-details">
         <div><dt>Date</dt><dd id="confirm-date"></dd></div>
         <div><dt>Entries</dt><dd id="confirm-count"></dd></div>
-        <div><dt>Total</dt><dd id="confirm-total"></dd></div>
       </dl>
       <p id="confirm-note" class="confirm-note" hidden></p>
       <button id="done-btn" class="primary-btn" type="button">Done</button>
@@ -82,8 +76,8 @@
       </div>
 
       <label class="field-label">
-        What did you work on?
-        <input type="text" class="task-description" placeholder="e.g. Fixed login bug" maxlength="200" autocomplete="off">
+        Ticket
+        <input type="text" class="task-ticket" placeholder="e.g. PROJ-123" maxlength="50" autocomplete="off">
       </label>
 
       <div class="time-row">
@@ -97,7 +91,6 @@
         </label>
       </div>
 
-      <div class="task-duration">Duration: <span class="duration-value">—</span></div>
       <div class="task-error" role="alert" hidden></div>
     </li>
   </template>

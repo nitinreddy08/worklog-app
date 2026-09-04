@@ -49,16 +49,18 @@ worklog-app/
 
 ## How data flows
 
-1. You fill in one or more tasks (description, start, end) for a date
+1. You fill in one or more tasks (ticket, start, end) for a date
    (defaults to today, using your phone's local date/time).
-2. Duration and the daily total are computed on the device as you type.
-3. On Save, the entries are POSTed as one JSON payload (with a unique
+2. On Save, the entries are POSTed as one JSON payload (with a unique
    `submissionId`) to the Apps Script Web App.
-4. The script validates everything again server-side, computes duration
-   itself (never trusts the client), and appends one row per task to the
-   correct month section of the sheet — creating a new `MONTH YYYY`
-   heading with exactly 3 blank rows before it when a new month starts,
-   and never touching prior months' rows.
+3. The script validates everything again server-side (never trusts the
+   client) and appends one row per task to the correct month section of
+   the sheet — creating a new `MONTH YYYY` heading with exactly 3 blank
+   rows before it when a new month starts, and never touching prior
+   months' rows. Start/end times are stored in 12-hour AM/PM format;
+   duration isn't stored (it's meant to be computed later — e.g. when
+   filling the data into Jira's own worklog, which tracks a start time
+   and a time-spent duration, not an end time).
 5. If you're offline, the payload is queued in the browser's storage and
    retried automatically once you're back online — nothing is lost, and
    duplicate delivery is prevented by the same `submissionId` check on
@@ -111,18 +113,18 @@ worklog-app/
 - Discreet "Log another date" for backfilling a previous day
 - Multiple tasks per day: add / edit / remove
 - Native `<input type="time">` pickers, no manual AM/PM typing
-- Automatic per-task duration calculation
-- Live daily total, recalculated on every edit
-- Client-side validation: required description/start/end, end-after-start
-- Google Sheet layout: `Date | Start Time | End Time | Duration | Work
-  Description`, one row per task
+- Client-side validation: required ticket/start/end, end-after-start
+- Google Sheet layout: `Date | Start Time | End Time | Ticket`, one row
+  per task, times stored as 12-hour AM/PM (e.g. `09:30 AM`)
+- Sheet formatting applied automatically on every save: bold header row,
+  accent month heading, alternating row shading, borders, sensible
+  column widths
 - Month-section organization with `MONTH YYYY` headings and exactly 3
   blank rows between months, maintained authoritatively server-side
   (no duplicate headings, no blank rows inside a month, historical
   months inserted in correct order)
-- Google Apps Script Web App: payload validation, server-side duration
-  calculation (never trusts the client), month-section writes, JSON
-  success/failure responses
+- Google Apps Script Web App: payload validation (never trusts the
+  client), month-section writes, JSON success/failure responses
 - Configuration via Script Properties (`SPREADSHEET_ID`, `SHEET_NAME`,
   `API_SECRET`) — nothing sensitive hard-coded in source
 - Duplicate-submission protection: disabled Save button + "Saving…"
@@ -136,10 +138,10 @@ worklog-app/
   icons (192px/512px), standalone display mode
 - Responsive mobile layout, 360–430px, large touch targets, no
   horizontal scroll
-- Editing before submission (description/start/end are all editable
-  until Save)
-- Submission confirmation screen (date, entry count, total) with a
-  "Done" button; no auto-navigation away
+- Editing before submission (ticket/start/end are all editable until
+  Save)
+- Submission confirmation screen (date, entry count) with a "Done"
+  button; no auto-navigation away
 - Explicit error states: offline, server error, invalid payload,
   timeout, duplicate — all shown to the user, data never silently lost
   or falsely marked "saved"

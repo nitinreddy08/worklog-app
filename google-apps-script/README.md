@@ -120,7 +120,7 @@ curl -X POST "https://script.google.com/macros/s/XXXXXXXX/exec" \
     "submissionId": "test-1",
     "date": "2026-09-04",
     "entries": [
-      { "description": "Test entry", "startTime": "09:00", "endTime": "10:00" }
+      { "ticket": "PROJ-123", "startTime": "09:00", "endTime": "10:00" }
     ]
   }'
 ```
