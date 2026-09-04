@@ -6,7 +6,7 @@
  *
  *   SEPTEMBER 2026
  *   Date | Start Time | End Time | Duration | Work Description
- *   04-09-2026 | 09:30 | 11:00 | 1:30 | Fixed login bug
+ *   04-09-2026 | 09:30 AM | 11:00 AM | 1:30 | Fixed login bug
  *   ...
  *   (3 blank rows)
  *   OCTOBER 2026
@@ -39,6 +39,14 @@ var MONTH_NAMES = [
 var BLANK_ROWS_BETWEEN_MONTHS = 3;
 var MAX_TRACKED_SUBMISSION_IDS = 300;
 var TIMEZONE = "Asia/Kolkata";
+
+// Cosmetic formatting applied automatically to every month section.
+var HEADER_BG_COLOR = "#37474F";
+var HEADER_FONT_COLOR = "#FFFFFF";
+var MONTH_HEADING_BG_COLOR = "#E8EAF6";
+var ALT_ROW_BG_COLOR = "#F5F5F5";
+var BORDER_COLOR = "#D9D9D9";
+var COLUMN_WIDTHS = [110, 90, 90, 80, 350]; // Date, Start, End, Duration, Description
 
 /* ------------------------------------------------------------------ */
 /* Entry points                                                        */
@@ -120,6 +128,7 @@ function getSheet_(config) {
   var sheet = ss.getSheetByName(config.sheetName);
   if (!sheet) {
     sheet = ss.insertSheet(config.sheetName);
+    applyColumnWidths_(sheet);
   }
   return sheet;
 }
@@ -278,8 +287,8 @@ function appendWorklog_(sheet, payload) {
     var durationMinutes = timeToMinutes_(entry.endTime) - timeToMinutes_(entry.startTime);
     return [
       displayDate,
-      entry.startTime,
-      entry.endTime,
+      formatTime12_(entry.startTime),
+      formatTime12_(entry.endTime),
       formatDurationString_(durationMinutes),
       String(entry.description).trim(),
     ];
@@ -290,8 +299,10 @@ function appendWorklog_(sheet, payload) {
 
   if (decision.mode === "match") {
     var section = decision.section;
+    var existingDataRows = Math.max(0, section.dataEndRow - section.dataStartRow + 1);
     sheet.insertRowsAfter(section.dataEndRow, dataRows.length);
     sheet.getRange(section.dataEndRow + 1, 1, dataRows.length, 5).setValues(dataRows);
+    styleDataRows_(sheet, section.dataEndRow + 1, dataRows.length, existingDataRows);
     return dataRows.length;
   }
 
@@ -315,11 +326,16 @@ function appendWorklog_(sheet, payload) {
 }
 
 function writeMonthBlock_(sheet, startRow, monthLabel, dataRows) {
+  sheet.getRange(startRow, 1, 1, 5).merge();
   sheet.getRange(startRow, 1).setValue(monthLabel);
-  sheet.getRange(startRow, 1, 1, 5).merge().setFontWeight("bold");
-  sheet.getRange(startRow + 1, 1, 1, 5).setValues([HEADER_ROW]).setFontWeight("bold");
+  styleMonthHeading_(sheet, startRow);
+
+  sheet.getRange(startRow + 1, 1, 1, 5).setValues([HEADER_ROW]);
+  styleHeaderRow_(sheet, startRow + 1);
+
   if (dataRows.length) {
     sheet.getRange(startRow + 2, 1, dataRows.length, 5).setValues(dataRows);
+    styleDataRows_(sheet, startRow + 2, dataRows.length, 0);
   }
 }
 
@@ -337,6 +353,59 @@ function formatDurationString_(totalMinutes) {
   return h + ":" + pad2_(m);
 }
 
+// "21:32" -> "09:32 PM"
+function formatTime12_(hhmm) {
+  var parts = hhmm.split(":");
+  var h = Number(parts[0]);
+  var period = h >= 12 ? "PM" : "AM";
+  var h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return pad2_(h12) + ":" + parts[1] + " " + period;
+}
+
 function jsonResponse_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ------------------------------------------------------------------ */
+/* Cosmetic styling                                                     */
+/* ------------------------------------------------------------------ */
+
+function applyColumnWidths_(sheet) {
+  for (var c = 0; c < COLUMN_WIDTHS.length; c++) {
+    sheet.setColumnWidth(c + 1, COLUMN_WIDTHS[c]);
+  }
+}
+
+function styleMonthHeading_(sheet, row) {
+  sheet.getRange(row, 1, 1, 5)
+    .setBackground(MONTH_HEADING_BG_COLOR)
+    .setFontWeight("bold")
+    .setFontSize(13)
+    .setHorizontalAlignment("left")
+    .setVerticalAlignment("middle");
+  sheet.setRowHeight(row, 28);
+}
+
+function styleHeaderRow_(sheet, row) {
+  sheet.getRange(row, 1, 1, 5)
+    .setBackground(HEADER_BG_COLOR)
+    .setFontColor(HEADER_FONT_COLOR)
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center")
+    .setBorder(true, true, true, true, true, false, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID);
+}
+
+function styleDataRows_(sheet, startRow, count, bandOffset) {
+  for (var i = 0; i < count; i++) {
+    var row = startRow + i;
+    var isEven = (bandOffset + i) % 2 === 0;
+    var bg = isEven ? "#FFFFFF" : ALT_ROW_BG_COLOR;
+
+    sheet.getRange(row, 1, 1, 5)
+      .setBackground(bg)
+      .setBorder(true, true, true, true, true, false, BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID);
+    sheet.getRange(row, 1, 1, 4).setHorizontalAlignment("center");
+    sheet.getRange(row, 5, 1, 1).setHorizontalAlignment("left");
+  }
 }
