@@ -5,13 +5,20 @@
  * appends it to a Google Sheet organised into calendar-month sections:
  *
  *   SEPTEMBER 2026
- *   Date | Start Time | End Time | Ticket
- *   04-09-2026 | 09:30 AM | 11:00 AM | PROJ-123
+ *   Date | Start Time | End Time | Duration | Ticket
+ *   04-09-2026 | 08:00 AM | 06:00 PM | 1d | PROJ-123
  *   ...
  *   (3 blank rows)
  *   OCTOBER 2026
- *   Date | Start Time | End Time | Ticket
+ *   Date | Start Time | End Time | Duration | Ticket
  *   ...
+ *
+ * Each entry picks one of three fixed presets instead of typing times —
+ * this mirrors Jira's own "Log work" dialog, which only needs a start
+ * date and a time-spent duration (never an end time). The Duration
+ * column is written in Jira's own format ("1d", "5h") so it can be
+ * pasted straight into Jira later; Start/End Time are only a
+ * human-readable record of roughly when that block was.
  *
  * Configuration is read from Script Properties (Project Settings >
  * Script properties) first:
@@ -29,7 +36,7 @@
 
 var DEFAULT_SPREADSHEET_ID = "1004yO9edlMlXGR5owYCGcdVfFYR3h33GokAVEUnlSfs";
 
-var HEADER_ROW = ["Date", "Start Time", "End Time", "Ticket"];
+var HEADER_ROW = ["Date", "Start Time", "End Time", "Duration", "Ticket"];
 var NUM_COLUMNS = HEADER_ROW.length;
 
 var MONTH_NAMES = [
@@ -41,13 +48,27 @@ var BLANK_ROWS_BETWEEN_MONTHS = 3;
 var MAX_TRACKED_SUBMISSION_IDS = 300;
 var TIMEZONE = "Asia/Kolkata";
 
+// A "day" in this app's own bookkeeping is the 1-Day preset's own
+// 8:00 AM-6:00 PM window (10 clock-hours) — used only to fold a
+// merged duration back into "Nd" when it divides evenly.
+var DAY_MINUTES = 600;
+
+// The three fixed choices offered in the app, mirrored from app.js's
+// DURATION_PRESETS (that copy only needs the display text; this one is
+// authoritative for the actual times and minutes).
+var DURATION_PRESETS = {
+  "1d": { start: "08:00", end: "18:00", minutes: DAY_MINUTES },
+  "1st-half": { start: "08:00", end: "13:00", minutes: 300 },
+  "2nd-half": { start: "14:00", end: "19:00", minutes: 300 },
+};
+
 // Cosmetic formatting applied automatically to every month section.
 var HEADER_BG_COLOR = "#37474F";
 var HEADER_FONT_COLOR = "#FFFFFF";
 var MONTH_HEADING_BG_COLOR = "#E8EAF6";
 var ALT_ROW_BG_COLOR = "#F5F5F5";
 var BORDER_COLOR = "#D9D9D9";
-var COLUMN_WIDTHS = [110, 100, 100, 150]; // Date, Start, End, Ticket
+var COLUMN_WIDTHS = [110, 100, 100, 80, 150]; // Date, Start, End, Duration, Ticket
 
 /* ------------------------------------------------------------------ */
 /* Entry points                                                        */
@@ -158,27 +179,74 @@ function validatePayload_(payload) {
     if (!entry.ticket || !String(entry.ticket).trim()) {
       return { valid: false, message: label + ": ticket is required." };
     }
-    if (!isValidTime_(entry.startTime)) {
-      return { valid: false, message: label + ": a valid start time (HH:MM) is required." };
-    }
-    if (!isValidTime_(entry.endTime)) {
-      return { valid: false, message: label + ": a valid end time (HH:MM) is required." };
-    }
-    if (timeToMinutes_(entry.endTime) <= timeToMinutes_(entry.startTime)) {
-      return { valid: false, message: label + ": end time must be after start time." };
+    if (!DURATION_PRESETS[entry.duration]) {
+      return { valid: false, message: label + ": duration must be one of 1d, 1st-half, 2nd-half." };
     }
   }
 
   return { valid: true };
 }
 
-function isValidTime_(value) {
-  return typeof value === "string" && /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
-}
-
 function timeToMinutes_(hhmm) {
   var parts = hhmm.split(":");
   return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+function minutesToHHMM_(totalMinutes) {
+  var h = Math.floor(totalMinutes / 60);
+  var m = totalMinutes % 60;
+  return pad2_(h) + ":" + pad2_(m);
+}
+
+// "08:00 AM" -> minutes since midnight
+function parseTime12ToMinutes_(str) {
+  var match = String(str).match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  var h = Number(match[1]) % 12;
+  if (match[3].toUpperCase() === "PM") h += 12;
+  return h * 60 + Number(match[2]);
+}
+
+// Our own "1d" / "5h" strings -> minutes, for merging into an existing row.
+function parseDurationMinutes_(str) {
+  var match = String(str).trim().match(/^(\d+)(d|h)$/i);
+  if (!match) return 0;
+  var n = Number(match[1]);
+  return match[2].toLowerCase() === "d" ? n * DAY_MINUTES : n * 60;
+}
+
+function formatMergedDuration_(totalMinutes) {
+  if (totalMinutes % DAY_MINUTES === 0) {
+    return (totalMinutes / DAY_MINUTES) + "d";
+  }
+  return (totalMinutes / 60) + "h";
+}
+
+// Combines an existing row's Start/End/Duration with another preset's,
+// widening the time span and adding the durations together. The ticket
+// (row[4]) is left untouched — it's already correct on both sides.
+function mergeRowWithPreset_(row, preset, displayDate) {
+  var startMinutes = Math.min(parseTime12ToMinutes_(row[1]), timeToMinutes_(preset.start));
+  var endMinutes = Math.max(parseTime12ToMinutes_(row[2]), timeToMinutes_(preset.end));
+  var totalMinutes = parseDurationMinutes_(row[3]) + preset.minutes;
+  return [
+    displayDate,
+    formatTime12_(minutesToHHMM_(startMinutes)),
+    formatTime12_(minutesToHHMM_(endMinutes)),
+    formatMergedDuration_(totalMinutes),
+    row[4],
+  ];
+}
+
+// A cell that looks like a date can get silently auto-converted to a real
+// Date value by Sheets depending on spreadsheet locale, even though we
+// wrote a plain "dd-MM-yyyy" string — so compare on the formatted string
+// either way rather than assuming the cell stayed a string.
+function cellMatchesDate_(cellValue, displayDate) {
+  if (Object.prototype.toString.call(cellValue) === "[object Date]") {
+    return Utilities.formatDate(cellValue, TIMEZONE, "dd-MM-yyyy") === displayDate;
+  }
+  return String(cellValue).trim() === displayDate;
 }
 
 /* ------------------------------------------------------------------ */
@@ -276,6 +344,13 @@ function decideInsertion_(sections, year, month) {
   return { mode: "append-end", section: sections.length ? sections[sections.length - 1] : null };
 }
 
+// Appends the payload's entries, merging into an existing row instead of
+// creating a duplicate whenever the same ticket already has a row for the
+// same date — e.g. logging 1st Half now and 2nd Half later the same day
+// becomes one row spanning both, with the durations added together
+// ("5h" + "5h" -> "1d"), rather than two separate PROJ-123 rows. A
+// different date is unaffected by this (it's simply a separate row, as
+// normal) — merging only ever happens within a single date+ticket pair.
 function appendWorklog_(sheet, payload) {
   var dateParts = payload.date.split("-"); // YYYY-MM-DD
   var year = Number(dateParts[0]);
@@ -284,33 +359,91 @@ function appendWorklog_(sheet, payload) {
   var displayDate = pad2_(day) + "-" + pad2_(month) + "-" + year;
   var monthLabel = MONTH_NAMES[month - 1] + " " + year;
 
-  var dataRows = payload.entries.map(function (entry) {
-    return [
-      displayDate,
-      formatTime12_(entry.startTime),
-      formatTime12_(entry.endTime),
-      String(entry.ticket).trim(),
-    ];
-  });
-
   var sections = findMonthSections_(sheet);
   var decision = decideInsertion_(sections, year, month);
 
+  var existingRows = [];
+  if (decision.mode === "match" && decision.section.dataEndRow >= decision.section.dataStartRow) {
+    var section = decision.section;
+    existingRows = sheet
+      .getRange(section.dataStartRow, 1, section.dataEndRow - section.dataStartRow + 1, NUM_COLUMNS)
+      .getValues();
+  }
+
+  var rowsToInsert = [];
+  // Tracks a ticket that this same payload already queued for insertion,
+  // so a second entry for it (e.g. 1st Half then 2nd Half in one submit)
+  // merges into the queued row instead of becoming a second new row.
+  var pendingIndexByTicket = {};
+  // Merges into a row that already exists on the sheet, keyed by its
+  // index into existingRows, applied once at the end — so multiple
+  // entries in one payload matching the same existing row don't each
+  // trigger their own (increasingly stale) sheet write.
+  var mergedByExistingIndex = {};
+
+  payload.entries.forEach(function (entry) {
+    var ticket = String(entry.ticket).trim();
+    var preset = DURATION_PRESETS[entry.duration];
+
+    if (Object.prototype.hasOwnProperty.call(pendingIndexByTicket, ticket)) {
+      var pendingIndex = pendingIndexByTicket[ticket];
+      rowsToInsert[pendingIndex] = mergeRowWithPreset_(rowsToInsert[pendingIndex], preset, displayDate);
+      return;
+    }
+
+    var matchIndex = -1;
+    for (var i = 0; i < existingRows.length; i++) {
+      if (cellMatchesDate_(existingRows[i][0], displayDate) && String(existingRows[i][4]).trim() === ticket) {
+        matchIndex = i;
+        break;
+      }
+    }
+
+    if (matchIndex !== -1) {
+      var base = Object.prototype.hasOwnProperty.call(mergedByExistingIndex, matchIndex)
+        ? mergedByExistingIndex[matchIndex]
+        : existingRows[matchIndex];
+      mergedByExistingIndex[matchIndex] = mergeRowWithPreset_(base, preset, displayDate);
+      return;
+    }
+
+    var freshValues = [
+      displayDate,
+      formatTime12_(preset.start),
+      formatTime12_(preset.end),
+      formatMergedDuration_(preset.minutes),
+      ticket,
+    ];
+    pendingIndexByTicket[ticket] = rowsToInsert.length;
+    rowsToInsert.push(freshValues);
+  });
+
+  var mergeSection = decision.section;
+  Object.keys(mergedByExistingIndex).forEach(function (key) {
+    var rowOffset = Number(key);
+    var sheetRow = mergeSection.dataStartRow + rowOffset;
+    sheet.getRange(sheetRow, 1, 1, NUM_COLUMNS).setValues([mergedByExistingIndex[key]]);
+  });
+
+  if (rowsToInsert.length === 0) {
+    return 0; // everything merged into rows that already existed
+  }
+
   if (decision.mode === "match") {
     var section = decision.section;
-    var existingDataRows = Math.max(0, section.dataEndRow - section.dataStartRow + 1);
-    sheet.insertRowsAfter(section.dataEndRow, dataRows.length);
-    sheet.getRange(section.dataEndRow + 1, 1, dataRows.length, NUM_COLUMNS).setValues(dataRows);
-    styleDataRows_(sheet, section.dataEndRow + 1, dataRows.length, existingDataRows);
-    return dataRows.length;
+    var existingDataRowCount = Math.max(0, section.dataEndRow - section.dataStartRow + 1);
+    sheet.insertRowsAfter(section.dataEndRow, rowsToInsert.length);
+    sheet.getRange(section.dataEndRow + 1, 1, rowsToInsert.length, NUM_COLUMNS).setValues(rowsToInsert);
+    styleDataRows_(sheet, section.dataEndRow + 1, rowsToInsert.length, existingDataRowCount);
+    return rowsToInsert.length;
   }
 
   if (decision.mode === "before") {
     var beforeRow = decision.section.headingRow;
-    var blockSize = 2 + dataRows.length + BLANK_ROWS_BETWEEN_MONTHS;
+    var blockSize = 2 + rowsToInsert.length + BLANK_ROWS_BETWEEN_MONTHS;
     sheet.insertRowsBefore(beforeRow, blockSize);
-    writeMonthBlock_(sheet, beforeRow, monthLabel, dataRows);
-    return dataRows.length;
+    writeMonthBlock_(sheet, beforeRow, monthLabel, rowsToInsert);
+    return rowsToInsert.length;
   }
 
   // append-end
@@ -320,8 +453,8 @@ function appendWorklog_(sheet, payload) {
   } else {
     startRow = decision.section.dataEndRow + 1 + BLANK_ROWS_BETWEEN_MONTHS;
   }
-  writeMonthBlock_(sheet, startRow, monthLabel, dataRows);
-  return dataRows.length;
+  writeMonthBlock_(sheet, startRow, monthLabel, rowsToInsert);
+  return rowsToInsert.length;
 }
 
 function writeMonthBlock_(sheet, startRow, monthLabel, dataRows) {

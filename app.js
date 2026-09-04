@@ -52,25 +52,17 @@ function formatFullDate(iso) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Time / duration helpers                                             */
+/* Duration presets                                                     */
 /* ------------------------------------------------------------------ */
 
-function timeToMinutes(hhmm) {
-  if (!hhmm) return null;
-  const [h, m] = hhmm.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-}
-
-// Returns minutes, or null if start/end are missing/invalid, or
-// undefined if end is not after start (same-day worklog only).
-function computeDurationMinutes(start, end) {
-  const s = timeToMinutes(start);
-  const e = timeToMinutes(end);
-  if (s === null || e === null) return null;
-  if (e <= s) return undefined;
-  return e - s;
-}
+// Mirrors DURATION_PRESETS in google-apps-script/Code.gs, which owns the
+// actual start/end times and Jira-format duration — the client only
+// needs the display text for the hint under each preset.
+const DURATION_PRESETS = {
+  "1d": { label: "1 Day", rangeText: "8:00 AM – 6:00 PM" },
+  "1st-half": { label: "1st Half", rangeText: "8:00 AM – 1:00 PM" },
+  "2nd-half": { label: "2nd Half", rangeText: "2:00 PM – 7:00 PM" },
+};
 
 function uid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -82,7 +74,7 @@ function uid() {
 /* ------------------------------------------------------------------ */
 
 function blankTask() {
-  return { id: uid(), ticket: "", start: "", end: "" };
+  return { id: uid(), ticket: "", duration: "" };
 }
 
 let state = {
@@ -171,46 +163,37 @@ function renderTaskList() {
     node.querySelector(".task-number").textContent = `Task ${index + 1}`;
 
     const ticketInput = node.querySelector(".task-ticket");
-    const startInput = node.querySelector(".task-start");
-    const endInput = node.querySelector(".task-end");
-    const taskError = node.querySelector(".task-error");
+    const durationInputs = node.querySelectorAll(".task-duration-input");
+    const durationHint = node.querySelector(".duration-time-hint");
     const removeBtn = node.querySelector(".remove-task-btn");
 
     ticketInput.value = entry.ticket;
-    startInput.value = entry.start;
-    endInput.value = entry.end;
-    updateTaskError(node, entry);
-
     ticketInput.addEventListener("input", () => {
       entry.ticket = ticketInput.value;
       saveDraft();
     });
-    startInput.addEventListener("input", () => {
-      entry.start = startInput.value;
-      updateTaskError(node, entry);
-      saveDraft();
+
+    durationInputs.forEach((input) => {
+      input.name = `duration-${entry.id}`;
+      input.checked = input.value === entry.duration;
+      input.addEventListener("change", () => {
+        entry.duration = input.value;
+        updateDurationHint(durationHint, entry.duration);
+        saveDraft();
+      });
     });
-    endInput.addEventListener("input", () => {
-      entry.end = endInput.value;
-      updateTaskError(node, entry);
-      saveDraft();
-    });
+    updateDurationHint(durationHint, entry.duration);
+
     removeBtn.addEventListener("click", () => removeTask(entry.id));
-    removeBtn.disabled = state.entries.length === 1 && !entry.ticket && !entry.start && !entry.end;
+    removeBtn.disabled = state.entries.length === 1 && !entry.ticket && !entry.duration;
 
     el.taskList.appendChild(node);
   });
 }
 
-function updateTaskError(node, entry) {
-  const taskError = node.querySelector(".task-error");
-  const duration = computeDurationMinutes(entry.start, entry.end);
-  if (duration === undefined) {
-    taskError.textContent = "End time must be after start time.";
-    taskError.hidden = false;
-  } else {
-    taskError.hidden = true;
-  }
+function updateDurationHint(durationHint, durationKey) {
+  const preset = DURATION_PRESETS[durationKey];
+  durationHint.textContent = preset ? preset.rangeText : "";
 }
 
 function render() {
@@ -288,17 +271,8 @@ function validateEntries(entries) {
     if (!entry.ticket || !entry.ticket.trim()) {
       errors.push(`${label}: ticket is required.`);
     }
-    if (!entry.start) {
-      errors.push(`${label}: start time is required.`);
-    }
-    if (!entry.end) {
-      errors.push(`${label}: end time is required.`);
-    }
-    if (entry.start && entry.end) {
-      const duration = computeDurationMinutes(entry.start, entry.end);
-      if (duration === undefined) {
-        errors.push(`${label}: end time must be after start time.`);
-      }
+    if (!DURATION_PRESETS[entry.duration]) {
+      errors.push(`${label}: pick a duration (1 Day, 1st Half, or 2nd Half).`);
     }
   });
   return errors;
@@ -346,8 +320,7 @@ function buildPayload(dateIso, entries, submissionId) {
     date: dateIso,
     entries: entries.map((e) => ({
       ticket: e.ticket.trim(),
-      startTime: e.start,
-      endTime: e.end,
+      duration: e.duration,
     })),
   };
   if (CONFIG.API_SECRET) payload.apiSecret = CONFIG.API_SECRET;

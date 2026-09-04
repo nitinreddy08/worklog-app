@@ -49,19 +49,24 @@ worklog-app/
 
 ## How data flows
 
-1. You fill in one or more tasks (ticket, start, end) for a date
-   (defaults to today, using your phone's local date/time).
+1. You fill in one or more tasks — a ticket and one of three durations
+   (**1 Day**, **1st Half**, **2nd Half**) — for a date (defaults to
+   today, using your phone's local date/time). This mirrors Jira's own
+   "Log work" dialog, which only needs a start date and a time-spent
+   duration, never an end time.
 2. On Save, the entries are POSTed as one JSON payload (with a unique
    `submissionId`) to the Apps Script Web App.
 3. The script validates everything again server-side (never trusts the
-   client) and appends one row per task to the correct month section of
-   the sheet — creating a new `MONTH YYYY` heading with exactly 3 blank
-   rows before it when a new month starts, and never touching prior
-   months' rows. Start/end times are stored in 12-hour AM/PM format;
-   duration isn't stored (it's meant to be computed later — e.g. when
-   filling the data into Jira's own worklog, which tracks a start time
-   and a time-spent duration, not an end time).
-5. If you're offline, the payload is queued in the browser's storage and
+   client), maps each duration preset to its actual start/end time and
+   a Jira-format duration string (`1d`, `5h`), and appends one row per
+   ticket to the correct month section of the sheet — creating a new
+   `MONTH YYYY` heading with exactly 3 blank rows before it when a new
+   month starts, and never touching prior months' rows. If the same
+   ticket already has a row for that date (from this submission or an
+   earlier one), the new duration is added into that row instead of
+   creating a duplicate — e.g. 1st Half now and 2nd Half later the same
+   day becomes one row spanning both, `1d` total, not two rows.
+4. If you're offline, the payload is queued in the browser's storage and
    retried automatically once you're back online — nothing is lost, and
    duplicate delivery is prevented by the same `submissionId` check on
    the backend.
@@ -91,10 +96,20 @@ worklog-app/
   outgrow this (hundreds of queued offline entries), swap the
   `readQueue`/`writeQueue` functions in `app.js` for an IndexedDB-backed
   version.
-- **No overnight-shift support** — end time must be after start time on
-  the same day; an earlier end time is treated as a validation error on
-  both the client and server, per the brief's stated preference for
-  "normal same-day worklog behavior."
+- **Fixed duration presets instead of free time entry** — the form asks
+  for a ticket and one of **1 Day** / **1st Half** / **2nd Half**
+  instead of manual start/end times. Each preset maps (server-side, so
+  the client can't spoof it) to a fixed window — 1 Day: 8:00 AM–6:00 PM,
+  1st Half: 8:00 AM–1:00 PM, 2nd Half: 2:00 PM–7:00 PM — and a
+  Jira-format duration (`1d`, `5h`) written to the sheet. This matches
+  how the data is meant to be used later: filled into Jira's "Log work"
+  dialog, which only takes a start date and a time-spent duration.
+- **Same ticket, same date → merged, not duplicated** — if you log
+  1st Half now and 2nd Half later (or in one submission with 2 tasks
+  for the same ticket), the backend finds the existing row for that
+  ticket+date and adds the durations together (`5h` + `5h` → `1d`),
+  widening the displayed time range rather than creating a second row.
+  A different date is unaffected — that's simply its own separate row.
 - **Historical/backfilled dates** — "Log another date" lets you submit
   for any date. The backend places new rows into the correct month
   section regardless of submission order: if that month's heading
@@ -112,10 +127,15 @@ worklog-app/
   UTC-shifted)
 - Discreet "Log another date" for backfilling a previous day
 - Multiple tasks per day: add / edit / remove
-- Native `<input type="time">` pickers, no manual AM/PM typing
-- Client-side validation: required ticket/start/end, end-after-start
-- Google Sheet layout: `Date | Start Time | End Time | Ticket`, one row
-  per task, times stored as 12-hour AM/PM (e.g. `09:30 AM`)
+- Fixed duration presets (1 Day / 1st Half / 2nd Half) instead of manual
+  time entry, each mapped server-side to a real time window and a
+  Jira-format duration string
+- Client-side validation: required ticket, required duration selection
+- Google Sheet layout: `Date | Start Time | End Time | Duration |
+  Ticket`, times stored as 12-hour AM/PM (e.g. `08:00 AM`), duration in
+  Jira's own format (`1d`, `5h`)
+- Same-ticket/same-date merging: a second entry for a ticket already
+  logged that day adds to the existing row instead of duplicating it
 - Sheet formatting applied automatically on every save: bold header row,
   accent month heading, alternating row shading, borders, sensible
   column widths
@@ -138,8 +158,8 @@ worklog-app/
   icons (192px/512px), standalone display mode
 - Responsive mobile layout, 360–430px, large touch targets, no
   horizontal scroll
-- Editing before submission (ticket/start/end are all editable until
-  Save)
+- Editing before submission (ticket and duration are both editable
+  until Save)
 - Submission confirmation screen (date, entry count) with a "Done"
   button; no auto-navigation away
 - Explicit error states: offline, server error, invalid payload,
@@ -165,8 +185,8 @@ worklog-app/
 - True secret-based backend authentication (not achievable in a
   frontend-only architecture — documented above and in the Apps Script
   README instead of falsely claimed)
-- Overnight (cross-midnight) shift handling — explicitly deferred to the
-  simpler "validation error" option per the brief's stated preference
+- Manual/custom time entry — intentionally replaced by the three fixed
+  duration presets to match the Jira workflow this data feeds into
 
 ### NEEDS MY ACTION
 

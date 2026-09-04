@@ -266,16 +266,64 @@ body {
   background: var(--color-surface);
 }
 
-.time-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.duration-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.task-error {
+.duration-fieldset legend {
   font-size: 0.85rem;
-  color: var(--color-danger);
   font-weight: 600;
+  color: var(--color-text-muted);
+  padding: 0;
+}
+
+.duration-options {
+  display: flex;
+  gap: 8px;
+}
+
+.duration-option {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  padding: 12px 6px;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.duration-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.duration-option:has(input:checked) {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.duration-option:has(input:focus-visible) {
+  outline: 3px solid var(--color-accent-soft);
+  outline-offset: 1px;
+}
+
+.duration-time-hint {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  min-height: 1.2em;
 }
 
 /* Buttons */

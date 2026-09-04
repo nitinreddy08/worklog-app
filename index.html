@@ -84,18 +84,24 @@
         <input type="text" class="task-ticket" placeholder="e.g. PROJ-123" maxlength="50" autocomplete="off">
       </label>
 
-      <div class="time-row">
-        <label class="field-label">
-          Start
-          <input type="time" class="task-start">
-        </label>
-        <label class="field-label">
-          End
-          <input type="time" class="task-end">
-        </label>
-      </div>
-
-      <div class="task-error" role="alert" hidden></div>
+      <fieldset class="duration-fieldset">
+        <legend>Duration</legend>
+        <div class="duration-options">
+          <label class="duration-option">
+            <input type="radio" class="task-duration-input" value="1d">
+            <span>1 Day</span>
+          </label>
+          <label class="duration-option">
+            <input type="radio" class="task-duration-input" value="1st-half">
+            <span>1st Half</span>
+          </label>
+          <label class="duration-option">
+            <input type="radio" class="task-duration-input" value="2nd-half">
+            <span>2nd Half</span>
+          </label>
+        </div>
+        <div class="duration-time-hint"></div>
+      </fieldset>
     </li>
   </template>
 

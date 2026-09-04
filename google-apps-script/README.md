@@ -120,10 +120,15 @@ curl -X POST "https://script.google.com/macros/s/XXXXXXXX/exec" \
     "submissionId": "test-1",
     "date": "2026-09-04",
     "entries": [
-      { "ticket": "PROJ-123", "startTime": "09:00", "endTime": "10:00" }
+      { "ticket": "PROJ-123", "duration": "1st-half" }
     ]
   }'
 ```
+
+`duration` must be one of `1d`, `1st-half`, or `2nd-half` — the server
+maps each to its own fixed start/end time and Jira-format duration
+string (see `DURATION_PRESETS` in `Code.gs`); it does not accept
+arbitrary times.
 
 Expected response:
 

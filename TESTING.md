@@ -10,70 +10,90 @@ Run through this after setup and after any change to `app.js` or
 - [ ] 3. "+ Add another task" adds a new task card.
 - [ ] 4. Removing a task removes it (last remaining task resets to blank
       instead of disappearing entirely).
-- [ ] 5. Start/End time pickers open the native Android time picker.
+- [ ] 5. Tapping a duration option (1 Day / 1st Half / 2nd Half)
+      highlights it and shows the matching time range underneath
+      (e.g. "8:00 AM – 1:00 PM" for 1st Half).
 - [ ] 6. Multiple tasks can be entered and edited independently.
 
 ## Validation
 
 - [ ] 7. Saving with an empty ticket field shows an error and does not
       submit.
-- [ ] 8. Saving with a missing start or end time shows an error.
-- [ ] 9. Entering an end time before the start time shows "End time must
-      be after start time" on that task and blocks save.
+- [ ] 8. Saving without picking a duration shows an error and does not
+      submit.
 
 ## Saving (online)
 
-- [ ] 10. Save button shows "Saving…" and disables while in flight.
-- [ ] 11. On success, the confirmation screen shows the correct date and
+- [ ] 9. Save button shows "Saving…" and disables while in flight.
+- [ ] 10. On success, the confirmation screen shows the correct date and
       entry count.
-- [ ] 12. Rows appear correctly in the Google Sheet: one row per task,
-      in `Date | Start Time | End Time | Ticket` order, with times shown
-      as 12-hour AM/PM (e.g. `09:30 AM`).
-- [ ] 15. Submitting a second, different worklog appends further rows
+- [ ] 11. Rows appear correctly in the Google Sheet: one row per
+      ticket, in `Date | Start Time | End Time | Duration | Ticket`
+      order, times shown as 12-hour AM/PM (e.g. `08:00 AM`), duration
+      in Jira format (`1d` for 1 Day, `5h` for either half).
+- [ ] 12. Submitting a second, different ticket appends a further row
       without disturbing earlier ones.
-- [ ] 16. A month heading (`SEPTEMBER 2026`, etc.) appears once per
+- [ ] 13. A month heading (`SEPTEMBER 2026`, etc.) appears once per
       month, in capitals.
-- [ ] 17. Exactly 3 blank rows separate one month's data from the next
+- [ ] 14. Exactly 3 blank rows separate one month's data from the next
       month's heading.
-- [ ] 18. Submitting again for a month that already has a heading does
+- [ ] 15. Submitting again for a month that already has a heading does
       **not** create a duplicate heading — it appends under the
       existing one.
-- [ ] 19. Re-submitting the exact same worklog twice in a row (e.g.
+- [ ] 16. Re-submitting the exact same worklog twice in a row (e.g.
       double-tapping Save, or the app auto-retrying) does not create
       duplicate rows — the second attempt returns "already saved."
 
+## Same-ticket merging
+
+- [ ] 17. Log a ticket as 1st Half today, save, then log the *same*
+      ticket as 2nd Half today in a separate save: the sheet still
+      shows only **one** row for that ticket/date, now spanning
+      `08:00 AM – 07:00 PM` with duration `1d` — not two rows.
+- [ ] 18. Add two tasks in the *same* submission for the same new
+      ticket (e.g. 1st Half + 2nd Half together): still results in one
+      merged row, not two.
+- [ ] 19. Log the same ticket on a *different* date: this produces its
+      own separate row for that date — it must not merge with the
+      other date's row.
+- [ ] 20. Log a *different* ticket on the same date as an existing
+      entry: this produces its own separate row — it must not merge
+      into the other ticket's row.
+
 ## Network failure & offline
 
-- [ ] 20. Turn on Airplane Mode, then Save: the app shows the offline
+- [ ] 21. Turn on Airplane Mode, then Save: the app shows the offline
       queued confirmation and does not lose the entered data.
-- [ ] 21. Turn Airplane Mode back off: the queued worklog syncs
+- [ ] 22. Turn Airplane Mode back off: the queued worklog syncs
       automatically (watch the sheet update, or the brief "Worklog
       saved" banner).
-- [ ] 22. Force a bad `APPS_SCRIPT_URL` (or stop the Apps Script
+- [ ] 23. Force a bad `APPS_SCRIPT_URL` (or stop the Apps Script
       deployment) and Save while online: the app shows "Could not save
       your worklog" with a way to retry, and the entered data is still
       there.
-- [ ] 23. Closing the browser/app mid-entry (before saving) and
+- [ ] 24. Closing the browser/app mid-entry (before saving) and
       reopening it on the same date restores the in-progress draft.
 
 ## Installation (Android/Chrome)
 
-- [ ] 24. Chrome's "Add to Home screen" / "Install app" prompt is
+- [ ] 25. Chrome's "Add to Home screen" / "Install app" prompt is
       available for the deployed HTTPS URL.
-- [ ] 25. After installing, launching from the home screen icon opens
+- [ ] 26. After installing, launching from the home screen icon opens
       in standalone mode (no browser chrome/address bar).
-- [ ] 26. The app icon on the home screen matches `icons/icon-192.png`.
+- [ ] 27. The app icon on the home screen matches `icons/icon-192.png`.
+- [ ] 28. The app stays in light mode even when the phone's system
+      theme is set to dark.
 
 ## Layout
 
-- [ ] 27. No horizontal scrolling and comfortable touch targets at a
+- [ ] 29. No horizontal scrolling and comfortable touch targets at a
       360px-wide viewport (e.g. Chrome DevTools device toolbar, small
       Android phone).
-- [ ] 28. Same check at 430px width (larger phones) — layout should
+- [ ] 30. Same check at 430px width (larger phones) — layout should
       still look intentional, not stretched oddly.
 
 ## Previous-date entries
 
-- [ ] 29. Tapping "Log another date" and picking yesterday's date lets
+- [ ] 31. Tapping "Log another date" and picking yesterday's date lets
       you fill in and save a worklog for that date; the sheet row shows
       yesterday's date, in the correct month section.
