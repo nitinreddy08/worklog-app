@@ -12,7 +12,7 @@ const CONFIG = {
   // Optional. Only needed if you set API_SECRET in the Apps Script's
   // Script Properties. See google-apps-script/README.md for why this is
   // a weak, best-effort filter rather than real authentication.
-  API_SECRET: "",
+  API_SECRET: "nitinreddyworklog",
   REQUEST_TIMEOUT_MS: 15000,
 };
 
