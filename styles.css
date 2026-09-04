@@ -387,13 +387,6 @@ input:focus-visible {
 .task-ticket::placeholder { color: #a5adba; text-transform: uppercase; font-weight: 500; }
 .task-ticket:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none; }
 
-.recent-tickets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: -4px;
-}
-
 .chip {
   font-family: var(--mono);
   font-size: 12px;

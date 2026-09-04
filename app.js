@@ -14,14 +14,12 @@ const CONFIG = {
   // a weak, best-effort filter rather than real authentication.
   API_SECRET: "nitinreddyworklog",
   REQUEST_TIMEOUT_MS: 15000,
-  MAX_RECENT_TICKETS: 6,
   LOG_PAGE_SIZE: 5,
 };
 
 const STORAGE_KEYS = {
   pendingQueue: "worklog_pending_queue",
   draftPrefix: "worklog_draft_",
-  recentTickets: "worklog_recent_tickets",
 };
 
 /* ------------------------------------------------------------------ */
@@ -285,21 +283,6 @@ function clearDraft(dateIso) {
   removeKey(draftKey(dateIso));
 }
 
-function getRecentTickets() {
-  const list = readJSON(STORAGE_KEYS.recentTickets, []);
-  return Array.isArray(list) ? list : [];
-}
-
-function rememberTickets(tickets) {
-  let recent = getRecentTickets();
-  for (const raw of tickets) {
-    const ticket = normalizeTicket(raw);
-    if (!ticket) continue;
-    recent = [ticket].concat(recent.filter((t) => t !== ticket));
-  }
-  writeJSON(STORAGE_KEYS.recentTickets, recent.slice(0, CONFIG.MAX_RECENT_TICKETS));
-}
-
 /* ------------------------------------------------------------------ */
 /* Toast                                                               */
 /* ------------------------------------------------------------------ */
@@ -354,7 +337,6 @@ function renderHeader() {
 
 function renderTaskList() {
   el.taskList.innerHTML = "";
-  const recent = getRecentTickets();
 
   state.entries.forEach((entry, index) => {
     const node = el.taskTemplate.content.firstElementChild.cloneNode(true);
@@ -362,7 +344,6 @@ function renderTaskList() {
     node.querySelector(".task-number").textContent = `Entry ${index + 1}`;
 
     const ticketInput = node.querySelector(".task-ticket");
-    const recentWrap = node.querySelector(".recent-tickets");
     const durationInputs = node.querySelectorAll(".task-duration-input");
     const durationHint = node.querySelector(".duration-time-hint");
     const removeBtn = node.querySelector(".remove-task-btn");
@@ -370,10 +351,8 @@ function renderTaskList() {
     ticketInput.value = entry.ticket;
     ticketInput.addEventListener("input", () => {
       entry.ticket = ticketInput.value;
-      renderRecentChips(recentWrap, recent, entry, ticketInput);
       saveDraft();
     });
-    renderRecentChips(recentWrap, recent, entry, ticketInput);
 
     durationInputs.forEach((input) => {
       input.name = `duration-${entry.id}`;
@@ -394,30 +373,6 @@ function renderTaskList() {
   });
 
   updateTotals();
-}
-
-function renderRecentChips(wrap, recent, entry, ticketInput) {
-  const current = normalizeTicket(entry.ticket);
-  const options = recent.filter((t) => t !== current);
-  wrap.innerHTML = "";
-  if (!options.length) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-  options.forEach((ticket) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "chip";
-    chip.textContent = ticket;
-    chip.addEventListener("click", () => {
-      entry.ticket = ticket;
-      ticketInput.value = ticket;
-      renderRecentChips(wrap, recent, entry, ticketInput);
-      saveDraft();
-    });
-    wrap.appendChild(chip);
-  });
 }
 
 function updateDurationHint(durationHint, durationKey) {
@@ -666,7 +621,6 @@ async function handleSave() {
   const payload = buildCreatePayload(state.date, entries, submissionId);
 
   const finishLocally = (offline, duplicate) => {
-    rememberTickets(entries.map((e) => e.ticket));
     clearDraft(state.date);
     state.log.stale = true;
     showConfirmation({ dateIso: state.date, entries, offline, duplicate });
@@ -976,7 +930,6 @@ el.editSaveBtn.addEventListener("click", async () => {
   try {
     const result = await postJSON({ action: "update", target: toTarget(row), changes });
     if (result && result.success) {
-      rememberTickets([changes.ticket]);
       closeModal(el.editModal);
       showToast("Entry updated");
       await loadLogPage(state.log.page);

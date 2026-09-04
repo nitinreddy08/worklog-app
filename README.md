@@ -137,9 +137,8 @@ worklog-app/
   time entry, each mapped server-side to a real time window and a
   Jira-format duration string
 - Client-side validation: required ticket, required duration selection
-- One-tap **recent ticket chips** (last 6 tickets you saved, stored on
-  the device) and a running **total in Jira notation** (e.g. `1d 5h`,
-  days and hours kept separate since Jira's `1d` is 8h)
+- A running **total in Jira notation** (e.g. `1d 5h`, days and hours
+  kept separate since Jira's `1d` is 8h)
 - Ticket IDs normalised to uppercase (`proj-123` → `PROJ-123`) so the
   same ticket never appears in two spellings
 - App-like shell that reads as a phone app on mobile and a centred card
