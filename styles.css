@@ -1,38 +1,25 @@
 :root {
-  --color-bg: #f7f7fb;
+  --color-bg: #f4f5f9;
   --color-surface: #ffffff;
-  --color-border: #e2e2ea;
-  --color-text: #1a1a24;
-  --color-text-muted: #64646f;
+  --color-surface-sunken: #f9fafb;
+  --color-border: #dfe2e8;
+  --color-border-strong: #c8ccd6;
+  --color-text: #101828;
+  --color-text-muted: #667085;
   --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-soft: #eef2ff;
   --color-accent-contrast: #ffffff;
-  --color-danger: #b91c1c;
-  --color-danger-bg: #fef2f2;
-  --color-warning-bg: #fffbeb;
-  --color-warning-text: #92400e;
-  --color-info-bg: #eef2ff;
-  --color-info-text: #3730a3;
-  --color-success: #15803d;
-  --radius: 12px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #111114;
-    --color-surface: #1c1c22;
-    --color-border: #2e2e37;
-    --color-text: #f2f2f5;
-    --color-text-muted: #9c9ca6;
-    --color-accent: #818cf8;
-    --color-accent-contrast: #111114;
-    --color-danger: #f87171;
-    --color-danger-bg: #3b1414;
-    --color-warning-bg: #3b2f0d;
-    --color-warning-text: #fcd34d;
-    --color-info-bg: #1e2247;
-    --color-info-text: #c7d2fe;
-    --color-success: #4ade80;
-  }
+  --color-danger: #d92d20;
+  --color-danger-bg: #fef3f2;
+  --color-warning-bg: #fffaeb;
+  --color-warning-text: #b54708;
+  --color-info-bg: #eff8ff;
+  --color-info-text: #175cd3;
+  --color-success: #17b26a;
+  --radius: 14px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
 * {
@@ -51,20 +38,21 @@ html, body {
 body {
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 16px;
-  line-height: 1.4;
+  line-height: 1.45;
   -webkit-tap-highlight-color: transparent;
+  color-scheme: light;
 }
 
 #app {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
-  padding: 20px 16px calc(32px + env(safe-area-inset-bottom));
+  padding: 24px 16px calc(32px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 /* Header */
@@ -77,61 +65,68 @@ body {
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
 }
 
 .date-display {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 #weekday {
   font-size: 0.95rem;
   color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 #full-date {
-  font-size: 1.15rem;
-  font-weight: 600;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 .link-btn {
   align-self: flex-start;
-  margin-top: 6px;
+  margin-top: 8px;
   background: none;
   border: none;
   color: var(--color-accent);
   font-size: 0.95rem;
   font-weight: 600;
-  padding: 8px 0;
+  padding: 6px 0;
   cursor: pointer;
-  text-decoration: underline;
 }
 
 .date-picker-wrap {
   margin-top: 8px;
-  padding: 12px;
+  padding: 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .date-picker-wrap label {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .date-picker-wrap input[type="date"] {
   width: 100%;
   padding: 12px;
   font-size: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg);
+  font-family: inherit;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-surface-sunken);
   color: var(--color-text);
 }
 
@@ -144,7 +139,7 @@ body {
 /* Banners */
 
 .banner {
-  padding: 12px 14px;
+  padding: 13px 15px;
   border-radius: var(--radius);
   font-size: 0.9rem;
   font-weight: 600;
@@ -161,7 +156,7 @@ body {
 }
 
 .error-banner {
-  padding: 12px 14px;
+  padding: 13px 15px;
   border-radius: var(--radius);
   background: var(--color-danger-bg);
   color: var(--color-danger);
@@ -172,8 +167,10 @@ body {
 /* Section title */
 
 .section-title {
-  font-size: 1.1rem;
-  margin: 0 0 12px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--color-text);
 }
 
 /* Task list */
@@ -184,17 +181,18 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .task-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 14px;
+  box-shadow: var(--shadow-card);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .task-card-header {
@@ -205,10 +203,13 @@ body {
 
 .task-number {
   font-weight: 700;
-  color: var(--color-text-muted);
-  font-size: 0.9rem;
+  color: var(--color-accent);
+  font-size: 0.8rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
+  background: var(--color-accent-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
 }
 
 .remove-task-btn {
@@ -229,24 +230,40 @@ body {
   background: var(--color-danger-bg);
 }
 
+.remove-task-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .field-label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.9rem;
+  gap: 6px;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text-muted);
 }
 
 .field-label input {
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 500;
+  font-family: inherit;
   color: var(--color-text);
   padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg);
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-surface-sunken);
   width: 100%;
+}
+
+.field-label input::placeholder {
+  color: #98a2b3;
+  font-weight: 400;
+}
+
+.field-label input:focus-visible {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
 }
 
 .time-row {
@@ -276,12 +293,18 @@ button {
   background: var(--color-accent);
   border: none;
   border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 10px rgba(79, 70, 229, 0.25);
   cursor: pointer;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: var(--color-accent-hover);
 }
 
 .primary-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .secondary-btn {
@@ -290,10 +313,14 @@ button {
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-accent);
-  background: var(--color-surface);
+  background: var(--color-accent-soft);
   border: 1.5px dashed var(--color-accent);
   border-radius: var(--radius);
   cursor: pointer;
+}
+
+.secondary-btn:hover {
+  background: #e0e4fd;
 }
 
 .text-btn {
@@ -307,8 +334,8 @@ button {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: 3px solid var(--color-accent-soft);
+  outline-offset: 1px;
 }
 
 /* Confirmation view */
@@ -323,15 +350,16 @@ input:focus-visible {
 }
 
 .confirm-icon {
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
   background: var(--color-success);
   color: #fff;
-  font-size: 2rem;
+  font-size: 2.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 14px rgba(23, 178, 106, 0.35);
 }
 
 .confirm-details {
@@ -340,11 +368,12 @@ input:focus-visible {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 16px;
+  box-shadow: var(--shadow-card);
+  padding: 18px;
   margin: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .confirm-details > div {
@@ -361,6 +390,7 @@ input:focus-visible {
 .confirm-details dd {
   margin: 0;
   font-weight: 700;
+  color: var(--color-text);
 }
 
 .confirm-note {
