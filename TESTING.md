@@ -60,6 +60,31 @@ Run through this after setup and after any change to `app.js` or
       save once more: still exactly one `MONTH YYYY` heading and one
       header row for that month (no duplicates appearing on each save).
 
+## Log tab (view, edit, merge, delete)
+
+- [ ] 20a. The Log tab lists entries newest first, 5 per page, with a
+      count pill matching the sheet's total number of data rows.
+- [ ] 20b. "Older" pages back through history; "Newer" returns. Each
+      button is disabled at its end of the list.
+- [ ] 20c. Tapping a row opens the editor prefilled with its values.
+      Changing the ticket/date/time and saving updates the sheet row,
+      which is re-inserted in date order (move a row to another month
+      and check it lands under that month's heading).
+- [ ] 20d. Quick-fill chips set start time + time spent in one tap.
+- [ ] 20e. Invalid time spent (e.g. "banana") is rejected before it is
+      sent; "1d 5h", "5h", "30m" are accepted.
+- [ ] 20f. Ticking two rows of the same ticket shows the merge bar with
+      the summed total (`1d` + `5h` → `1d 5h`); confirming leaves one
+      row in the sheet with the earliest date/start and the sum.
+- [ ] 20g. Ticking rows of different tickets disables Merge with an
+      explanation.
+- [ ] 20h. Deleting the only entry of a month removes that month's
+      heading, header, and separator rows from the sheet too.
+- [ ] 20i. Edit a row in the sheet by hand, then try to edit that same
+      row from the app without refreshing: the app refuses ("changed in
+      the sheet") and reloads instead of editing the wrong row.
+- [ ] 20j. After saving on Home, switching to Log shows the new entry.
+
 ## Network failure & offline
 
 - [ ] 21. Turn on Airplane Mode, then Save: the app shows the offline

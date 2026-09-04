@@ -32,7 +32,14 @@
       <symbol id="i-sunrise" viewBox="0 0 24 24"><path d="M4 18h16M6.5 14a5.5 5.5 0 0 1 11 0M12 3v4M8.5 5l1.5 1.5M15.5 5 14 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-sunset" viewBox="0 0 24 24"><path d="M4 18h16M6.5 14a5.5 5.5 0 0 1 11 0M12 7V3M9.5 5.5 12 3l2.5 2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0M12 19h.01M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-merge" viewBox="0 0 24 24"><path d="M7 4v6a4 4 0 0 0 4 4h6M17 4v6a4 4 0 0 1-4 4M12 20v-6M9 17l3 3 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM13.5 6.5l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     </defs>
   </svg>
 
@@ -45,72 +52,215 @@
       <button id="change-date-btn" class="icon-btn" type="button" aria-expanded="false" aria-controls="date-picker-wrap" aria-label="Log another date" title="Log another date">
         <svg class="icon"><use href="#i-calendar"/></svg>
       </button>
+      <button id="log-refresh-btn" class="icon-btn" type="button" aria-label="Refresh entries" title="Refresh" hidden>
+        <svg class="icon"><use href="#i-refresh"/></svg>
+      </button>
     </header>
 
-    <section class="date-hero" aria-live="polite">
-      <div class="date-hero-top">
-        <span id="weekday" class="date-weekday">—</span>
-        <span id="date-badge" class="date-badge">Today</span>
-      </div>
-      <h1 id="full-date" class="date-title">—</h1>
-    </section>
-
-    <div id="date-picker-wrap" class="date-picker" hidden>
-      <label for="date-input" class="field-caption">Log work for another date</label>
-      <input type="date" id="date-input">
-      <div class="date-picker-actions">
-        <button id="date-confirm-btn" type="button" class="btn btn-secondary">Use this date</button>
-        <button id="date-cancel-btn" type="button" class="btn btn-ghost">Cancel</button>
-      </div>
-    </div>
-
-    <div id="offline-banner" class="banner banner-warning" role="status" hidden>
-      <svg class="icon"><use href="#i-wifi-off"/></svg>
-      <span>Offline — your worklog will be saved when you're back online.</span>
-    </div>
-    <div id="sync-banner" class="banner banner-info" role="status" hidden></div>
-
-    <main id="form-view" class="form-view">
-      <div class="section-head">
-        <h2 class="section-title">Entries</h2>
-        <span id="entry-count" class="count-pill">1</span>
-      </div>
-
-      <ul id="task-list" class="task-list" aria-label="Work entries"></ul>
-
-      <button id="add-task-btn" class="btn btn-dashed" type="button">
-        <svg class="icon"><use href="#i-plus"/></svg>
-        <span>Add another entry</span>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button id="tab-home" class="tab is-active" role="tab" type="button" aria-selected="true" aria-controls="home-panel" data-tab="home">
+        <svg class="icon"><use href="#i-home"/></svg><span>Home</span>
       </button>
+      <button id="tab-log" class="tab" role="tab" type="button" aria-selected="false" aria-controls="log-view" data-tab="log">
+        <svg class="icon"><use href="#i-list"/></svg><span>Log</span>
+      </button>
+    </nav>
 
-      <div id="form-error" class="banner banner-error" role="alert" hidden></div>
-
-      <div class="summary-bar">
-        <div class="summary-total">
-          <span class="summary-label">Total time spent</span>
-          <span id="total-display" class="summary-value">—</span>
+    <div id="home-panel" class="panel" role="tabpanel">
+      <section class="date-hero" aria-live="polite">
+        <div class="date-hero-top">
+          <span id="weekday" class="date-weekday">—</span>
+          <span id="date-badge" class="date-badge">Today</span>
         </div>
-        <button id="save-btn" class="btn btn-primary" type="button">
-          <span class="btn-label">Save Worklog</span>
-          <svg class="icon"><use href="#i-arrow"/></svg>
+        <h1 id="full-date" class="date-title">—</h1>
+      </section>
+
+      <div id="date-picker-wrap" class="date-picker" hidden>
+        <label for="date-input" class="field-caption">Log work for another date</label>
+        <input type="date" id="date-input">
+        <div class="date-picker-actions">
+          <button id="date-confirm-btn" type="button" class="btn btn-secondary">Use this date</button>
+          <button id="date-cancel-btn" type="button" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+
+      <div id="offline-banner" class="banner banner-warning" role="status" hidden>
+        <svg class="icon"><use href="#i-wifi-off"/></svg>
+        <span>Offline — your worklog will be saved when you're back online.</span>
+      </div>
+      <div id="sync-banner" class="banner banner-info" role="status" hidden></div>
+
+      <main id="form-view" class="form-view">
+        <div class="section-head">
+          <h2 class="section-title">Entries</h2>
+          <span id="entry-count" class="count-pill">1</span>
+        </div>
+
+        <ul id="task-list" class="task-list" aria-label="Work entries"></ul>
+
+        <button id="add-task-btn" class="btn btn-dashed" type="button">
+          <svg class="icon"><use href="#i-plus"/></svg>
+          <span>Add another entry</span>
+        </button>
+
+        <div id="form-error" class="banner banner-error" role="alert" hidden></div>
+
+        <div class="summary-bar">
+          <div class="summary-total">
+            <span class="summary-label">Total time spent</span>
+            <span id="total-display" class="summary-value">—</span>
+          </div>
+          <button id="save-btn" class="btn btn-primary" type="button">
+            <span class="btn-label">Save Worklog</span>
+            <svg class="icon"><use href="#i-arrow"/></svg>
+          </button>
+        </div>
+      </main>
+
+      <section id="confirmation-view" class="confirmation" hidden aria-live="polite">
+        <div class="confirm-icon" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></div>
+        <h2 id="confirm-heading" class="confirm-title">Worklog saved</h2>
+        <p id="confirm-note" class="confirm-note" hidden></p>
+        <dl class="confirm-details">
+          <div><dt>Date</dt><dd id="confirm-date"></dd></div>
+          <div><dt>Entries</dt><dd id="confirm-count"></dd></div>
+          <div><dt>Time spent</dt><dd id="confirm-total"></dd></div>
+        </dl>
+        <button id="done-btn" class="btn btn-primary" type="button">
+          <span class="btn-label">Done</span>
+        </button>
+      </section>
+    </div>
+
+    <section id="log-view" class="panel log-view" role="tabpanel" hidden>
+      <div class="section-head">
+        <h2 class="section-title">Logged entries</h2>
+        <span id="log-total" class="count-pill">—</span>
+      </div>
+
+      <div id="log-offline" class="banner banner-warning" hidden>
+        <svg class="icon"><use href="#i-wifi-off"/></svg>
+        <span>You're offline. Viewing and editing entries needs a connection.</span>
+      </div>
+
+      <div id="log-error" class="banner banner-error" role="alert" hidden></div>
+
+      <div id="merge-bar" class="merge-bar" hidden>
+        <div class="merge-bar-text">
+          <span id="merge-count" class="merge-count">0 selected</span>
+          <span id="merge-hint" class="merge-hint"></span>
+        </div>
+        <div class="merge-bar-actions">
+          <button id="merge-clear-btn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+          <button id="merge-btn" class="btn btn-secondary btn-sm" type="button" disabled>
+            <svg class="icon"><use href="#i-merge"/></svg><span>Merge</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="log-table" aria-describedby="log-page-info">
+          <thead>
+            <tr>
+              <th class="col-check"><span class="sr-only">Select</span></th>
+              <th class="col-date">Date</th>
+              <th class="col-ticket">Ticket</th>
+              <th class="col-start">Start</th>
+              <th class="col-spent">Spent</th>
+            </tr>
+          </thead>
+          <tbody id="log-body"></tbody>
+        </table>
+        <div id="log-loading" class="log-state" hidden>
+          <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+        <div id="log-empty" class="log-state log-empty" hidden>
+          <svg class="icon"><use href="#i-list"/></svg>
+          <p>Nothing logged yet. Save your first entry from Home.</p>
+        </div>
+      </div>
+
+      <div class="pager">
+        <button id="log-older" class="btn btn-ghost btn-sm" type="button" disabled>
+          <svg class="icon"><use href="#i-arrow-left"/></svg><span>Older</span>
+        </button>
+        <span id="log-page-info" class="pager-info">—</span>
+        <button id="log-newer" class="btn btn-ghost btn-sm" type="button" disabled>
+          <span>Newer</span><svg class="icon"><use href="#i-arrow"/></svg>
         </button>
       </div>
-    </main>
-
-    <section id="confirmation-view" class="confirmation" hidden aria-live="polite">
-      <div class="confirm-icon" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></div>
-      <h2 id="confirm-heading" class="confirm-title">Worklog saved</h2>
-      <p id="confirm-note" class="confirm-note" hidden></p>
-      <dl class="confirm-details">
-        <div><dt>Date</dt><dd id="confirm-date"></dd></div>
-        <div><dt>Entries</dt><dd id="confirm-count"></dd></div>
-        <div><dt>Time spent</dt><dd id="confirm-total"></dd></div>
-      </dl>
-      <button id="done-btn" class="btn btn-primary" type="button">
-        <span class="btn-label">Done</span>
-      </button>
+      <p class="log-tip">Tap a row to edit or delete it. Tick two or more rows of the same ticket to merge them.</p>
     </section>
   </div>
+
+  <div id="edit-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <div class="modal-head">
+        <h3 id="edit-title" class="modal-title">Edit entry</h3>
+        <button type="button" class="icon-btn icon-btn-sm" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+      </div>
+
+      <label class="field">
+        <span class="field-caption">Ticket</span>
+        <span class="input-wrap">
+          <svg class="icon input-icon"><use href="#i-tag"/></svg>
+          <input type="text" id="edit-ticket" class="task-ticket" maxlength="50" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </span>
+      </label>
+
+      <label class="field">
+        <span class="field-caption">Date</span>
+        <input type="date" id="edit-date" class="text-input">
+      </label>
+
+      <div class="field">
+        <span class="field-caption">Quick fill</span>
+        <div class="quick-fill">
+          <button type="button" class="chip" data-preset="1d">1 Day · 8:00 AM · 1d</button>
+          <button type="button" class="chip" data-preset="1st-half">1st Half · 8:00 AM · 5h</button>
+          <button type="button" class="chip" data-preset="2nd-half">2nd Half · 2:00 PM · 5h</button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="field">
+          <span class="field-caption">Start time</span>
+          <input type="time" id="edit-start" class="text-input">
+        </label>
+        <label class="field">
+          <span class="field-caption">Time spent</span>
+          <input type="text" id="edit-spent" class="text-input mono" placeholder="1d 5h" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <p class="field-help">Jira format: <code>1d</code>, <code>5h</code>, <code>1d 5h</code>, <code>30m</code>.</p>
+
+      <div id="edit-error" class="banner banner-error" role="alert" hidden></div>
+
+      <div class="modal-actions">
+        <button id="edit-delete-btn" type="button" class="btn btn-danger-ghost">
+          <svg class="icon"><use href="#i-trash"/></svg><span>Delete</span>
+        </button>
+        <button id="edit-save-btn" type="button" class="btn btn-primary">
+          <span class="btn-label">Save changes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="confirm-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-sheet modal-sheet-sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+      <h3 id="confirm-modal-title" class="modal-title">Confirm</h3>
+      <p id="confirm-modal-text" class="modal-text"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button id="confirm-modal-ok" type="button" class="btn btn-primary"><span class="btn-label">Confirm</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <template id="task-template">
     <li class="task-card">
@@ -155,6 +305,16 @@
         <div class="duration-time-hint"></div>
       </fieldset>
     </li>
+  </template>
+
+  <template id="log-row-template">
+    <tr class="log-row">
+      <td class="col-check"><input type="checkbox" class="row-check" aria-label="Select entry"></td>
+      <td class="col-date"><span class="cell-date"></span><span class="cell-weekday"></span></td>
+      <td class="col-ticket"><span class="cell-ticket"></span></td>
+      <td class="col-start"><span class="cell-start"></span></td>
+      <td class="col-spent"><span class="cell-spent"></span></td>
+    </tr>
   </template>
 
   <script src="app.js"></script>

@@ -144,6 +144,17 @@ worklog-app/
   same ticket never appears in two spellings
 - App-like shell that reads as a phone app on mobile and a centred card
   on desktop; light theme only; inline SVG icons, no JS dependencies
+- **Log tab**: the sheet's entries in a table, 5 per page, newest first,
+  with Older / Newer paging. Tap a row to **edit** (ticket, date, start
+  time, time spent — with 1 Day / 1st Half / 2nd Half quick-fill) or
+  **delete** it; tick two or more rows of the same ticket to **merge**
+  them (earliest date and start kept, time spent summed in Jira
+  notation, e.g. `1d` + `5h` → `1d 5h`). Every change is written to the
+  sheet immediately and the row is re-inserted in sorted position; a
+  month left empty by a merge or delete is removed from the sheet.
+  Rows are addressed by sheet row number **plus** their current values,
+  so a row that has shifted is refused ("changed in the sheet") rather
+  than edited by mistake — no ID column is added to the sheet.
 - Google Sheet layout: `Date | Ticket | Start Time | Time Spent`, dates
   as `YYYY-MM-DD`, times as 12-hour AM/PM (e.g. `08:00 AM`), time spent
   in Jira's own format (`1d`, `5h`); one row per entry, kept in

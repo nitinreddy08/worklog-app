@@ -1,11 +1,10 @@
 /**
  * Worklog PWA backend.
  *
- * Receives a JSON worklog submission from the PWA, validates it, and
- * writes it into a Google Sheet organised into calendar-month sections.
- * Each row is exactly one Jira "Log work" entry — a ticket, the date and
- * time it started, and the time spent in Jira's own format — so the
- * month-end CSV export can be fed straight into Jira:
+ * Stores worklog entries in a Google Sheet organised into calendar-month
+ * sections. Each row is exactly one Jira "Log work" entry — a ticket, the
+ * date and time it started, and the time spent in Jira's own format — so
+ * the month-end CSV export can be fed straight into Jira:
  *
  *   SEPTEMBER 2026
  *   Date       | Ticket   | Start Time | Time Spent
@@ -18,26 +17,37 @@
  *   Date       | Ticket   | Start Time | Time Spent
  *   ...
  *
- * Rows within a month are kept in ascending date order (then start time),
- * so a backfilled earlier date is inserted in its proper place rather than
- * appended at the bottom. Rows are never merged: working the same ticket
- * morning and afternoon is two rows, because it is two Jira worklogs.
+ * Rows within a month are kept in ascending (date, start time) order.
+ * Every cell we write is forced to plain-text format, because Sheets
+ * otherwise silently turns "SEPTEMBER 2026" into a date (which breaks
+ * section detection) and dates/times into locale-formatted values.
  *
- * Every cell we write is forced to plain-text format. Otherwise Sheets
- * silently turns "SEPTEMBER 2026" into a date (which broke month-section
- * detection and caused duplicate headings) and "2026-09-04" / "08:00 AM"
- * into date/time values that export inconsistently to CSV.
+ * API (all responses are JSON):
  *
- * Configuration is read from Script Properties (Project Settings >
- * Script properties) first:
- *   SPREADSHEET_ID  - required, the target spreadsheet's ID
- *   SHEET_NAME      - optional, defaults to "Worklog"
- *   API_SECRET      - optional, see the security note in the README
+ *   GET  ?action=list&page=1&pageSize=5[&key=API_SECRET]
+ *        -> one page of entries, newest first, with paging flags.
  *
- * If SPREADSHEET_ID isn't found there, DEFAULT_SPREADSHEET_ID below is
- * used instead.
+ *   POST { entries:[{ticket, duration}], date, submissionId[, apiSecret] }
+ *        -> create (the PWA's Save). duration is a preset key.
  *
- * See README.md in this folder for full setup instructions.
+ *   POST { action:"update", target:{row,date,ticket,start,spent},
+ *          changes:{date,ticket,start,spent}[, apiSecret] }
+ *        -> edit one entry. The row is re-inserted in sorted position.
+ *
+ *   POST { action:"merge", targets:[{row,date,ticket,start,spent}, ...] }
+ *        -> combine 2+ entries of the SAME ticket into one: earliest
+ *           date/start kept, time spent summed in Jira notation.
+ *
+ *   POST { action:"delete", target:{row,date,ticket,start,spent} }
+ *
+ * A target is addressed by its sheet row number PLUS its current values;
+ * the script re-reads the row and refuses (code "stale") if the values no
+ * longer match, so a row that shifted is never edited by mistake. This
+ * avoids adding an ID column to the sheet.
+ *
+ * Configuration comes from Script Properties (SPREADSHEET_ID, optional
+ * SHEET_NAME and API_SECRET), falling back to DEFAULT_SPREADSHEET_ID.
+ * See README.md in this folder.
  */
 
 var DEFAULT_SPREADSHEET_ID = "1004yO9edlMlXGR5owYCGcdVfFYR3h33GokAVEUnlSfs";
@@ -56,11 +66,13 @@ var MONTH_NAMES = [
 
 var BLANK_ROWS_BETWEEN_MONTHS = 3;
 var MAX_TRACKED_SUBMISSION_IDS = 300;
+var DEFAULT_PAGE_SIZE = 5;
+var MAX_PAGE_SIZE = 50;
 
 // The three fixed choices offered in the app. "start" is when the block
 // begins (24h); "timeSpent" is written verbatim in Jira's duration format.
-// Jira treats 1d as 8h by default — we deliberately leave that alone and
-// log half days as 5h.
+// Jira treats 1d as 8h by default — deliberately left alone; half days
+// are logged as 5h.
 var DURATION_PRESETS = {
   "1d":       { start: "08:00", timeSpent: "1d" },
   "1st-half": { start: "08:00", timeSpent: "5h" },
@@ -84,7 +96,20 @@ var SHEET_TZ = "Asia/Kolkata";
 /* ------------------------------------------------------------------ */
 
 function doGet(e) {
-  return jsonResponse_({ status: "ok", message: "Worklog Apps Script endpoint is running." });
+  try {
+    var params = (e && e.parameter) || {};
+    if (params.action !== "list") {
+      return jsonResponse_({ status: "ok", message: "Worklog Apps Script endpoint is running." });
+    }
+    var config = getConfig_();
+    if (config.apiSecret && params.key !== config.apiSecret) {
+      return jsonResponse_({ success: false, message: "Unauthorized." });
+    }
+    var sheet = getSheet_(config);
+    return jsonResponse_(listEntries_(sheet, Number(params.page) || 1, Number(params.pageSize) || DEFAULT_PAGE_SIZE));
+  } catch (err) {
+    return jsonResponse_({ success: false, message: "Server error: " + err.message });
+  }
 }
 
 function doPost(e) {
@@ -107,34 +132,121 @@ function doPost(e) {
       }
     }
 
-    var validation = validatePayload_(payload);
-    if (!validation.valid) {
-      return jsonResponse_({ success: false, message: validation.message });
-    }
-
-    if (payload.submissionId && isDuplicateSubmission_(payload.submissionId)) {
-      return jsonResponse_({
-        success: true,
-        duplicate: true,
-        message: "This worklog was already saved.",
-      });
-    }
-
-    var sheet = getSheet_(config);
-    var rowsAdded = appendWorklog_(sheet, payload);
-
-    if (payload.submissionId) {
-      recordSubmission_(payload.submissionId);
-    }
-
-    return jsonResponse_({
-      success: true,
-      message: "Worklog saved successfully",
-      rowsAdded: rowsAdded,
-    });
+    var action = payload.action || "create";
+    if (action === "create") return handleCreate_(config, payload);
+    if (action === "update") return handleUpdate_(config, payload);
+    if (action === "merge") return handleMerge_(config, payload);
+    if (action === "delete") return handleDelete_(config, payload);
+    return jsonResponse_({ success: false, message: "Unknown action: " + action });
   } catch (err) {
     return jsonResponse_({ success: false, message: "Server error: " + err.message });
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Action handlers                                                     */
+/* ------------------------------------------------------------------ */
+
+function handleCreate_(config, payload) {
+  var validation = validateCreatePayload_(payload);
+  if (!validation.valid) {
+    return jsonResponse_({ success: false, message: validation.message });
+  }
+
+  if (payload.submissionId && isDuplicateSubmission_(payload.submissionId)) {
+    return jsonResponse_({ success: true, duplicate: true, message: "This worklog was already saved." });
+  }
+
+  var sheet = getSheet_(config);
+  var entries = payload.entries.map(function (entry) {
+    var preset = DURATION_PRESETS[entry.duration];
+    return {
+      dateIso: payload.date,
+      ticket: normalizeTicket_(entry.ticket),
+      startMinutes: timeToMinutes_(preset.start),
+      timeSpent: preset.timeSpent,
+    };
+  });
+  entries.forEach(function (entry) { insertEntry_(sheet, entry); });
+
+  if (payload.submissionId) {
+    recordSubmission_(payload.submissionId);
+  }
+
+  return jsonResponse_({ success: true, message: "Worklog saved successfully", rowsAdded: entries.length });
+}
+
+function handleUpdate_(config, payload) {
+  var changes = payload.changes || {};
+  var entry = {
+    dateIso: String(changes.date || ""),
+    ticket: normalizeTicket_(changes.ticket),
+    startMinutes: parseStartMinutes_(changes.start),
+    timeSpent: normalizeDuration_(changes.spent),
+  };
+  var problem = validateEntry_(entry, changes.start, changes.spent);
+  if (problem) return jsonResponse_({ success: false, message: problem });
+
+  var sheet = getSheet_(config);
+  var located = locateTarget_(sheet, payload.target);
+  if (!located.ok) return jsonResponse_(located.error);
+
+  deleteDataRow_(sheet, located.rowNumber);
+  var newRow = insertEntry_(sheet, entry);
+  return jsonResponse_({ success: true, message: "Entry updated", row: newRow });
+}
+
+function handleMerge_(config, payload) {
+  var targets = payload.targets;
+  if (!Array.isArray(targets) || targets.length < 2) {
+    return jsonResponse_({ success: false, message: "Select at least two entries to merge." });
+  }
+
+  var sheet = getSheet_(config);
+  var located = [];
+  for (var i = 0; i < targets.length; i++) {
+    var result = locateTarget_(sheet, targets[i]);
+    if (!result.ok) return jsonResponse_(result.error);
+    located.push(result);
+  }
+
+  var ticket = located[0].values.ticket;
+  for (var j = 1; j < located.length; j++) {
+    if (located[j].values.ticket !== ticket) {
+      return jsonResponse_({ success: false, code: "different-tickets", message: "Only entries for the same ticket can be merged." });
+    }
+  }
+
+  // Keep the earliest date/start; add up every time spent.
+  var earliest = located[0].values;
+  var total = emptyDuration_();
+  located.forEach(function (item) {
+    if (sortKey_(item.values.dateKey, item.values.startMinutes) < sortKey_(earliest.dateKey, earliest.startMinutes)) {
+      earliest = item.values;
+    }
+    addDuration_(total, parseDuration_(item.values.timeSpent));
+  });
+
+  // Delete bottom-up so earlier row numbers stay valid.
+  located.sort(function (a, b) { return b.rowNumber - a.rowNumber; });
+  located.forEach(function (item) { deleteDataRow_(sheet, item.rowNumber); });
+
+  var merged = {
+    dateIso: earliest.dateIso,
+    ticket: ticket,
+    startMinutes: earliest.startMinutes,
+    timeSpent: formatDuration_(total),
+  };
+  var newRow = insertEntry_(sheet, merged);
+  return jsonResponse_({ success: true, message: "Entries merged", row: newRow, timeSpent: merged.timeSpent });
+}
+
+function handleDelete_(config, payload) {
+  var sheet = getSheet_(config);
+  var located = locateTarget_(sheet, payload.target);
+  if (!located.ok) return jsonResponse_(located.error);
+  deleteDataRow_(sheet, located.rowNumber);
+  return jsonResponse_({ success: true, message: "Entry deleted" });
 }
 
 /* ------------------------------------------------------------------ */
@@ -169,51 +281,65 @@ function getSheet_(config) {
 /* Validation                                                           */
 /* ------------------------------------------------------------------ */
 
-function validatePayload_(payload) {
+function validateCreatePayload_(payload) {
   if (!payload || typeof payload !== "object") {
     return { valid: false, message: "Invalid payload." };
   }
-  if (!payload.date || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date)) {
+  if (!isIsoDate_(payload.date)) {
     return { valid: false, message: "A valid date (YYYY-MM-DD) is required." };
   }
   if (!Array.isArray(payload.entries) || payload.entries.length === 0) {
     return { valid: false, message: "At least one worklog entry is required." };
   }
-
   for (var i = 0; i < payload.entries.length; i++) {
     var entry = payload.entries[i];
     var label = "Entry " + (i + 1);
     if (!entry || typeof entry !== "object") {
       return { valid: false, message: label + " is invalid." };
     }
-    if (!entry.ticket || !String(entry.ticket).trim()) {
+    if (!normalizeTicket_(entry.ticket)) {
       return { valid: false, message: label + ": ticket is required." };
     }
     if (!DURATION_PRESETS[entry.duration]) {
       return { valid: false, message: label + ": duration must be one of 1d, 1st-half, 2nd-half." };
     }
   }
-
   return { valid: true };
 }
 
+// Validates a fully-specified entry (used by update). Returns a message
+// or null.
+function validateEntry_(entry, rawStart, rawSpent) {
+  if (!isIsoDate_(entry.dateIso)) return "A valid date (YYYY-MM-DD) is required.";
+  if (!entry.ticket) return "Ticket is required.";
+  if (parseStartMinutes_(rawStart) === null) return "Start time must look like 08:00 AM or 14:00.";
+  if (!entry.timeSpent) return "Time spent must be in Jira format, e.g. 1d, 5h, 1d 5h, 30m.";
+  return null;
+}
+
+function isIsoDate_(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeTicket_(value) {
+  return String(value === null || value === undefined ? "" : value).trim().toUpperCase();
+}
+
 /* ------------------------------------------------------------------ */
-/* Duplicate submission protection                                     */
+/* Duplicate submission protection (create only)                       */
 /* ------------------------------------------------------------------ */
 
 function isDuplicateSubmission_(submissionId) {
-  var ids = getTrackedSubmissionIds_();
-  return ids.indexOf(submissionId) !== -1;
+  return getTrackedSubmissionIds_().indexOf(submissionId) !== -1;
 }
 
 function recordSubmission_(submissionId) {
-  var props = PropertiesService.getScriptProperties();
   var ids = getTrackedSubmissionIds_();
   ids.push(submissionId);
   if (ids.length > MAX_TRACKED_SUBMISSION_IDS) {
     ids = ids.slice(ids.length - MAX_TRACKED_SUBMISSION_IDS);
   }
-  props.setProperty("PROCESSED_SUBMISSION_IDS", JSON.stringify(ids));
+  PropertiesService.getScriptProperties().setProperty("PROCESSED_SUBMISSION_IDS", JSON.stringify(ids));
 }
 
 function getTrackedSubmissionIds_() {
@@ -228,7 +354,54 @@ function getTrackedSubmissionIds_() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Reading what's already on the sheet                                 */
+/* Jira durations ("1d 5h")                                            */
+/* ------------------------------------------------------------------ */
+
+var DURATION_UNITS = ["w", "d", "h", "m"];
+
+function emptyDuration_() {
+  return { w: 0, d: 0, h: 0, m: 0 };
+}
+
+// "1d 5h" -> {w:0,d:1,h:5,m:0}; null if not a valid Jira duration.
+function parseDuration_(text) {
+  var s = String(text === null || text === undefined ? "" : text).trim().toLowerCase();
+  if (!s) return null;
+  var total = emptyDuration_();
+  var re = /(\d+)\s*([wdhm])/g;
+  var consumed = 0;
+  var match;
+  while ((match = re.exec(s)) !== null) {
+    total[match[2]] += Number(match[1]);
+    consumed += match[0].length;
+  }
+  if (consumed === 0) return null;
+  if (s.replace(/(\d+)\s*([wdhm])/g, "").replace(/\s+/g, "") !== "") return null;
+  return total;
+}
+
+function addDuration_(into, other) {
+  if (!other) return into;
+  DURATION_UNITS.forEach(function (u) { into[u] += other[u]; });
+  return into;
+}
+
+// Units are kept separate on purpose: Jira's 1d is 8h, so hours are never
+// folded into days here — "5h" + "5h" is "10h", not "1d 2h".
+function formatDuration_(d) {
+  var parts = [];
+  DURATION_UNITS.forEach(function (u) { if (d[u]) parts.push(d[u] + u); });
+  return parts.length ? parts.join(" ") : "0m";
+}
+
+// Canonical spelling of a user-typed duration, or "" if invalid.
+function normalizeDuration_(text) {
+  var parsed = parseDuration_(text);
+  return parsed ? formatDuration_(parsed) : "";
+}
+
+/* ------------------------------------------------------------------ */
+/* Reading the sheet                                                    */
 /* ------------------------------------------------------------------ */
 
 function isDateValue_(value) {
@@ -236,9 +409,8 @@ function isDateValue_(value) {
 }
 
 // A month heading is a row with something in column A and nothing in
-// column B. Column A is either our plain-text "SEPTEMBER 2026" or — on a
-// sheet Sheets already tampered with — a Date value it auto-converted the
-// text into (shown as "September 2026" / 9/1/2026).
+// column B: either our plain-text "SEPTEMBER 2026" or, on a sheet Sheets
+// already tampered with, a Date value it auto-converted the text into.
 function parseMonthHeading_(cellA, cellB) {
   if (cellB !== "" && cellB !== null && cellB !== undefined) return null;
   if (isDateValue_(cellA)) {
@@ -255,8 +427,8 @@ function parseMonthHeading_(cellA, cellB) {
   return { year: Number(match[2]), month: monthIndex + 1 };
 }
 
-// Finds every month section: heading row, header row, and the contiguous
-// block of data rows beneath (dataEndRow < dataStartRow means no data yet).
+// Every month section in sheet order: heading row, header row, and the
+// contiguous data block beneath (dataEndRow < dataStartRow = no data).
 function findMonthSections_(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow === 0) return [];
@@ -268,10 +440,8 @@ function findMonthSections_(sheet) {
     var ym = parseMonthHeading_(values[r][0], values[r][1]);
     if (!ym) continue;
 
-    var headingRow = r + 1; // 1-indexed
-    var headerRow = headingRow + 1;
+    var headingRow = r + 1;
     var dataStartRow = headingRow + 2;
-
     var dataEndRow = dataStartRow - 1;
     for (var d = dataStartRow; d <= lastRow; d++) {
       var row = values[d - 1];
@@ -284,7 +454,7 @@ function findMonthSections_(sheet) {
       year: ym.year,
       month: ym.month,
       headingRow: headingRow,
-      headerRow: headerRow,
+      headerRow: headingRow + 1,
       dataStartRow: dataStartRow,
       dataEndRow: dataEndRow,
     });
@@ -295,25 +465,20 @@ function findMonthSections_(sheet) {
 
 function decideInsertion_(sections, year, month) {
   var targetKey = year * 12 + month;
-
   for (var i = 0; i < sections.length; i++) {
     if (sections[i].year === year && sections[i].month === month) {
       return { mode: "match", section: sections[i] };
     }
   }
-
   for (var j = 0; j < sections.length; j++) {
-    var key = sections[j].year * 12 + sections[j].month;
-    if (key > targetKey) {
+    if (sections[j].year * 12 + sections[j].month > targetKey) {
       return { mode: "before", section: sections[j] };
     }
   }
-
   return { mode: "append-end", section: sections.length ? sections[sections.length - 1] : null };
 }
 
-// yyyyMMdd as a number, from our "yyyy-MM-dd" text, a legacy "dd-MM-yyyy"
-// text, or a Date value Sheets auto-converted. Null if unrecognisable.
+// yyyyMMdd number from "yyyy-MM-dd", legacy "dd-MM-yyyy", or a Date value.
 function parseDateKey_(cell) {
   if (isDateValue_(cell)) {
     return Number(Utilities.formatDate(cell, SHEET_TZ, "yyyyMMdd"));
@@ -326,7 +491,13 @@ function parseDateKey_(cell) {
   return null;
 }
 
-// Minutes since midnight from "08:00 AM", "14:00", or a Date/time value.
+function dateKeyToIso_(key) {
+  var s = String(key);
+  return s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8);
+}
+
+// Minutes since midnight from "08:00 AM", "14:00", or a Date/time value;
+// null if unparseable.
 function parseStartMinutes_(cell) {
   if (isDateValue_(cell)) {
     var parts = Utilities.formatDate(cell, SHEET_TZ, "HH:mm").split(":");
@@ -340,50 +511,115 @@ function parseStartMinutes_(cell) {
     return h * 60 + Number(twelve[2]);
   }
   var twentyFour = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (twentyFour) return Number(twentyFour[1]) * 60 + Number(twentyFour[2]);
-  return 0;
+  if (twentyFour && Number(twentyFour[1]) < 24 && Number(twentyFour[2]) < 60) {
+    return Number(twentyFour[1]) * 60 + Number(twentyFour[2]);
+  }
+  return null;
 }
 
 function sortKey_(dateKey, startMinutes) {
-  return (dateKey || 0) * 10000 + startMinutes;
+  return (dateKey || 0) * 10000 + (startMinutes || 0);
 }
 
-// The existing data rows of a section as [{ rowNumber, key }], in sheet order.
-function readSectionRows_(sheet, section) {
-  var count = section.dataEndRow - section.dataStartRow + 1;
-  if (count <= 0) return [];
-  var values = sheet.getRange(section.dataStartRow, 1, count, NUM_COLUMNS).getValues();
-  var rows = [];
-  for (var i = 0; i < values.length; i++) {
-    rows.push({
-      rowNumber: section.dataStartRow + i,
-      key: sortKey_(parseDateKey_(values[i][COL_DATE]), parseStartMinutes_(values[i][COL_START])),
-    });
+// Normalised view of one data row's cells.
+function readRowValues_(cells) {
+  var dateKey = parseDateKey_(cells[COL_DATE]);
+  var startMinutes = parseStartMinutes_(cells[COL_START]);
+  return {
+    dateKey: dateKey,
+    dateIso: dateKey ? dateKeyToIso_(dateKey) : String(cells[COL_DATE]),
+    ticket: normalizeTicket_(cells[COL_TICKET]),
+    startMinutes: startMinutes === null ? 0 : startMinutes,
+    startText: startMinutes === null ? String(cells[COL_START]) : formatTime12_(minutesToHHMM_(startMinutes)),
+    timeSpent: normalizeDuration_(cells[COL_SPENT]) || String(cells[COL_SPENT]).trim(),
+  };
+}
+
+// All data rows across all sections, each with its sheet row number.
+function readAllEntries_(sheet) {
+  var sections = findMonthSections_(sheet);
+  var entries = [];
+  sections.forEach(function (section) {
+    var count = section.dataEndRow - section.dataStartRow + 1;
+    if (count <= 0) return;
+    var values = sheet.getRange(section.dataStartRow, 1, count, NUM_COLUMNS).getValues();
+    for (var i = 0; i < values.length; i++) {
+      var v = readRowValues_(values[i]);
+      v.rowNumber = section.dataStartRow + i;
+      entries.push(v);
+    }
+  });
+  return entries;
+}
+
+function listEntries_(sheet, page, pageSize) {
+  pageSize = Math.max(1, Math.min(MAX_PAGE_SIZE, pageSize));
+  page = Math.max(1, page);
+
+  var entries = readAllEntries_(sheet);
+  // Newest first; ties broken by sheet position (later row = newer).
+  entries.sort(function (a, b) {
+    var diff = sortKey_(b.dateKey, b.startMinutes) - sortKey_(a.dateKey, a.startMinutes);
+    return diff !== 0 ? diff : b.rowNumber - a.rowNumber;
+  });
+
+  var total = entries.length;
+  var start = (page - 1) * pageSize;
+  var slice = entries.slice(start, start + pageSize).map(function (v) {
+    return { row: v.rowNumber, date: v.dateIso, ticket: v.ticket, start: v.startText, spent: v.timeSpent };
+  });
+
+  return {
+    success: true,
+    page: page,
+    pageSize: pageSize,
+    total: total,
+    hasNewer: page > 1,
+    hasOlder: start + pageSize < total,
+    rows: slice,
+  };
+}
+
+// Finds the target row and confirms it still holds the values the client
+// saw. Returns { ok, rowNumber, values } or { ok:false, error }.
+function locateTarget_(sheet, target) {
+  if (!target || typeof target !== "object") {
+    return { ok: false, error: { success: false, message: "Missing target entry." } };
   }
-  return rows;
+  var rowNumber = Number(target.row);
+  var stale = { ok: false, error: { success: false, code: "stale", message: "That entry changed in the sheet. Refresh and try again." } };
+  if (!rowNumber || rowNumber < 1 || rowNumber > sheet.getLastRow()) return stale;
+
+  var cells = sheet.getRange(rowNumber, 1, 1, NUM_COLUMNS).getValues()[0];
+  var values = readRowValues_(cells);
+  var expected = {
+    dateKey: parseDateKey_(target.date),
+    ticket: normalizeTicket_(target.ticket),
+    startMinutes: parseStartMinutes_(target.start),
+    timeSpent: normalizeDuration_(target.spent) || String(target.spent || "").trim(),
+  };
+  if (values.dateKey !== expected.dateKey) return stale;
+  if (values.ticket !== expected.ticket) return stale;
+  if (values.startMinutes !== (expected.startMinutes === null ? 0 : expected.startMinutes)) return stale;
+  if (values.timeSpent !== expected.timeSpent) return stale;
+
+  return { ok: true, rowNumber: rowNumber, values: values };
 }
 
 /* ------------------------------------------------------------------ */
 /* Writing                                                              */
 /* ------------------------------------------------------------------ */
 
-function appendWorklog_(sheet, payload) {
-  var dateParts = payload.date.split("-"); // YYYY-MM-DD
+// Inserts one entry into its month section, in ascending (date, start)
+// order, creating the section if needed. Returns the new row number.
+function insertEntry_(sheet, entry) {
+  var dateParts = entry.dateIso.split("-");
   var year = Number(dateParts[0]);
   var month = Number(dateParts[1]);
-  var isoDate = payload.date;
   var dateKey = Number(dateParts[0] + dateParts[1] + dateParts[2]);
+  var key = sortKey_(dateKey, entry.startMinutes);
+  var values = [entry.dateIso, entry.ticket, formatTime12_(minutesToHHMM_(entry.startMinutes)), entry.timeSpent];
   var monthLabel = MONTH_NAMES[month - 1] + " " + year;
-
-  var newRows = payload.entries.map(function (entry) {
-    var preset = DURATION_PRESETS[entry.duration];
-    var startMinutes = timeToMinutes_(preset.start);
-    return {
-      key: sortKey_(dateKey, startMinutes),
-      values: [isoDate, String(entry.ticket).trim(), formatTime12_(preset.start), preset.timeSpent],
-    };
-  });
-  newRows.sort(function (a, b) { return a.key - b.key; });
 
   var sections = findMonthSections_(sheet);
   var decision = decideInsertion_(sections, year, month);
@@ -392,49 +628,62 @@ function appendWorklog_(sheet, payload) {
     var section = decision.section;
     refreshSectionChrome_(sheet, section);
 
-    var existing = readSectionRows_(sheet, section);
-    newRows.forEach(function (newRow) {
-      // Insert before the first existing row that sorts after this one, so
-      // the section stays in ascending (date, start time) order; if none
-      // does, it goes at the end of the section.
-      var insertAt = section.dataEndRow + 1;
+    var insertAt = section.dataEndRow + 1;
+    var count = section.dataEndRow - section.dataStartRow + 1;
+    if (count > 0) {
+      var existing = sheet.getRange(section.dataStartRow, 1, count, NUM_COLUMNS).getValues();
       for (var i = 0; i < existing.length; i++) {
-        if (existing[i].key > newRow.key) {
-          insertAt = existing[i].rowNumber;
+        var v = readRowValues_(existing[i]);
+        if (sortKey_(v.dateKey, v.startMinutes) > key) {
+          insertAt = section.dataStartRow + i;
           break;
         }
       }
-      insertRowAt_(sheet, insertAt, newRow.values);
-      for (var j = 0; j < existing.length; j++) {
-        if (existing[j].rowNumber >= insertAt) existing[j].rowNumber += 1;
-      }
-      existing.push({ rowNumber: insertAt, key: newRow.key });
-      existing.sort(function (a, b) { return a.rowNumber - b.rowNumber; });
-      section.dataEndRow += 1;
-    });
-
-    // Re-band the whole section so alternating colours stay consistent
-    // after inserting in the middle.
-    styleDataRows_(sheet, section.dataStartRow, section.dataEndRow - section.dataStartRow + 1);
-    return newRows.length;
+    }
+    insertRowAt_(sheet, insertAt, values);
+    styleDataRows_(sheet, section.dataStartRow, count + 1);
+    return insertAt;
   }
-
-  var values = newRows.map(function (r) { return r.values; });
 
   if (decision.mode === "before") {
     var beforeRow = decision.section.headingRow;
-    var blockSize = 2 + values.length + BLANK_ROWS_BETWEEN_MONTHS;
-    sheet.insertRowsBefore(beforeRow, blockSize);
-    writeMonthBlock_(sheet, beforeRow, monthLabel, values);
-    return values.length;
+    sheet.insertRowsBefore(beforeRow, 2 + 1 + BLANK_ROWS_BETWEEN_MONTHS);
+    writeMonthBlock_(sheet, beforeRow, monthLabel, [values]);
+    return beforeRow + 2;
   }
 
-  // append-end
   var startRow = decision.section
     ? decision.section.dataEndRow + 1 + BLANK_ROWS_BETWEEN_MONTHS
     : 1;
-  writeMonthBlock_(sheet, startRow, monthLabel, values);
-  return values.length;
+  writeMonthBlock_(sheet, startRow, monthLabel, [values]);
+  return startRow + 2;
+}
+
+// Deletes one data row, then removes its month section entirely if that
+// left the section with no data rows.
+function deleteDataRow_(sheet, rowNumber) {
+  sheet.deleteRow(rowNumber);
+  removeEmptySections_(sheet);
+}
+
+function removeEmptySections_(sheet) {
+  var sections = findMonthSections_(sheet);
+  // Bottom-up so earlier row numbers stay valid while deleting.
+  for (var i = sections.length - 1; i >= 0; i--) {
+    var section = sections[i];
+    if (section.dataEndRow >= section.dataStartRow) continue;
+
+    var from = section.headingRow;
+    var to = section.headerRow;
+    if (i > 0) {
+      // Take the separator blanks above the heading with it.
+      from = Math.max(sections[i - 1].dataEndRow + 1, section.headingRow - BLANK_ROWS_BETWEEN_MONTHS);
+    } else if (sections.length > 1) {
+      // First section: take the separator blanks below the header instead.
+      to = Math.min(sections[1].headingRow - 1, section.headerRow + BLANK_ROWS_BETWEEN_MONTHS);
+    }
+    sheet.deleteRows(from, to - from + 1);
+  }
 }
 
 // Inserts a single data row at exactly rowNumber, shifting anything below
@@ -444,10 +693,6 @@ function insertRowAt_(sheet, rowNumber, values) {
   if (rowNumber <= sheet.getLastRow()) {
     sheet.insertRowsBefore(rowNumber, 1);
   }
-  writeTextRow_(sheet, rowNumber, values);
-}
-
-function writeTextRow_(sheet, rowNumber, values) {
   var range = sheet.getRange(rowNumber, 1, 1, NUM_COLUMNS);
   range.setNumberFormat("@");
   range.setValues([values]);
@@ -474,9 +719,8 @@ function writeMonthBlock_(sheet, startRow, monthLabel, dataRows) {
 }
 
 // Repairs a section's heading and header if they've drifted: a heading
-// Sheets auto-converted to a date goes back to plain "SEPTEMBER 2026" text,
-// and a header row from an older column layout is rewritten to the
-// current one.
+// Sheets auto-converted to a date goes back to plain "SEPTEMBER 2026"
+// text, and a header row from an older column layout is rewritten.
 function refreshSectionChrome_(sheet, section) {
   var label = MONTH_NAMES[section.month - 1] + " " + section.year;
   var headingCell = sheet.getRange(section.headingRow, 1);
@@ -507,6 +751,10 @@ function pad2_(n) {
 function timeToMinutes_(hhmm) {
   var parts = hhmm.split(":");
   return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+function minutesToHHMM_(totalMinutes) {
+  return pad2_(Math.floor(totalMinutes / 60)) + ":" + pad2_(totalMinutes % 60);
 }
 
 // "14:00" -> "02:00 PM"

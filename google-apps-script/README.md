@@ -141,6 +141,22 @@ header row, and one data row. Re-running the exact same `curl` command
 (same `submissionId`) should return `"duplicate": true` and **not** add
 a second row.
 
+### The full API (used by the app's Log tab)
+
+| Request | What it does |
+|---|---|
+| `GET ?action=list&page=1&pageSize=5&key=API_SECRET` | One page of entries, newest first, with `total`, `hasOlder`, `hasNewer`. |
+| `POST {action:"update", target, changes}` | Edit one entry. `changes` = `{date, ticket, start, spent}`; the row is re-inserted in sorted position (moving month if needed). |
+| `POST {action:"merge", targets:[...]}` | Merge 2+ entries of the **same ticket** into one: earliest date/start kept, time spent summed (`1d` + `5h` → `1d 5h`). |
+| `POST {action:"delete", target}` | Remove one entry. |
+
+A `target` is `{row, date, ticket, start, spent}` exactly as returned by
+`list`. The script re-reads that sheet row and refuses with
+`code: "stale"` if its values no longer match, so a row that shifted is
+never edited by mistake. A month section left with no rows is removed
+(heading, header and separator rows). `key` / `apiSecret` are only
+checked if `API_SECRET` is set in Script Properties.
+
 ## 7. Redeploying after changes
 
 If you edit `Code.gs` later:
