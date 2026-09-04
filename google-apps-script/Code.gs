@@ -362,6 +362,14 @@ function appendWorklog_(sheet, payload) {
   var sections = findMonthSections_(sheet);
   var decision = decideInsertion_(sections, year, month);
 
+  // A month section created under an older schema (e.g. before a column
+  // was renamed or added) keeps its original header text forever unless
+  // corrected here — appending never rewrites it on its own. Bring it in
+  // line with the current HEADER_ROW whenever it doesn't already match.
+  if (decision.mode === "match") {
+    refreshHeaderIfStale_(sheet, decision.section);
+  }
+
   var existingRows = [];
   if (decision.mode === "match" && decision.section.dataEndRow >= decision.section.dataStartRow) {
     var section = decision.section;
@@ -455,6 +463,16 @@ function appendWorklog_(sheet, payload) {
   }
   writeMonthBlock_(sheet, startRow, monthLabel, rowsToInsert);
   return rowsToInsert.length;
+}
+
+function refreshHeaderIfStale_(sheet, section) {
+  var current = sheet.getRange(section.headerRow, 1, 1, NUM_COLUMNS).getValues()[0];
+  var matches = current.length === HEADER_ROW.length && current.every(function (cell, i) {
+    return String(cell).trim() === HEADER_ROW[i];
+  });
+  if (matches) return;
+  sheet.getRange(section.headerRow, 1, 1, NUM_COLUMNS).setValues([HEADER_ROW]);
+  styleHeaderRow_(sheet, section.headerRow);
 }
 
 function writeMonthBlock_(sheet, startRow, monthLabel, dataRows) {
