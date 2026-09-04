@@ -28,9 +28,10 @@ Run through this after setup and after any change to `app.js` or
 - [ ] 10. On success, the confirmation screen shows the correct date and
       entry count.
 - [ ] 11. Rows appear correctly in the Google Sheet: one row per
-      ticket, in `Date | Start Time | End Time | Duration | Ticket`
-      order, times shown as 12-hour AM/PM (e.g. `08:00 AM`), duration
-      in Jira format (`1d` for 1 Day, `5h` for either half).
+      entry, in `Date | Ticket | Start Time | Time Spent` order, date as
+      `YYYY-MM-DD`, start time as 12-hour AM/PM (`08:00 AM` for 1 Day
+      and 1st Half, `02:00 PM` for 2nd Half), time spent in Jira format
+      (`1d` for 1 Day, `5h` for either half).
 - [ ] 12. Submitting a second, different ticket appends a further row
       without disturbing earlier ones.
 - [ ] 13. A month heading (`SEPTEMBER 2026`, etc.) appears once per
@@ -44,21 +45,20 @@ Run through this after setup and after any change to `app.js` or
       double-tapping Save, or the app auto-retrying) does not create
       duplicate rows — the second attempt returns "already saved."
 
-## Same-ticket merging
+## Ordering and one-row-per-worklog
 
 - [ ] 17. Log a ticket as 1st Half today, save, then log the *same*
-      ticket as 2nd Half today in a separate save: the sheet still
-      shows only **one** row for that ticket/date, now spanning
-      `08:00 AM – 07:00 PM` with duration `1d` — not two rows.
-- [ ] 18. Add two tasks in the *same* submission for the same new
-      ticket (e.g. 1st Half + 2nd Half together): still results in one
-      merged row, not two.
-- [ ] 19. Log the same ticket on a *different* date: this produces its
-      own separate row for that date — it must not merge with the
-      other date's row.
-- [ ] 20. Log a *different* ticket on the same date as an existing
-      entry: this produces its own separate row — it must not merge
-      into the other ticket's row.
+      ticket as 2nd Half today: the sheet shows **two** rows for it
+      (`08:00 AM / 5h` and `02:00 PM / 5h`) — two Jira worklogs, never
+      merged into one.
+- [ ] 18. With a row for today already present, use "Log another date"
+      to save an entry for an *earlier* date this month: it appears
+      **above** today's row, not at the bottom of the section.
+- [ ] 19. Two entries on the same date: the 8:00 AM one (1 Day or
+      1st Half) sits above the 2:00 PM one (2nd Half).
+- [ ] 20. Save again for a month that already has a heading, and then
+      save once more: still exactly one `MONTH YYYY` heading and one
+      header row for that month (no duplicates appearing on each save).
 
 ## Network failure & offline
 

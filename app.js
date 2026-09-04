@@ -56,12 +56,12 @@ function formatFullDate(iso) {
 /* ------------------------------------------------------------------ */
 
 // Mirrors DURATION_PRESETS in google-apps-script/Code.gs, which owns the
-// actual start/end times and Jira-format duration — the client only
-// needs the display text for the hint under each preset.
+// actual start time and Jira-format time spent — the client only needs
+// the display text for the hint under each preset.
 const DURATION_PRESETS = {
-  "1d": { label: "1 Day", rangeText: "8:00 AM – 6:00 PM" },
-  "1st-half": { label: "1st Half", rangeText: "8:00 AM – 1:00 PM" },
-  "2nd-half": { label: "2nd Half", rangeText: "2:00 PM – 7:00 PM" },
+  "1d": { label: "1 Day", rangeText: "Starts 8:00 AM · logs 1d in Jira" },
+  "1st-half": { label: "1st Half", rangeText: "Starts 8:00 AM · logs 5h in Jira" },
+  "2nd-half": { label: "2nd Half", rangeText: "Starts 2:00 PM · logs 5h in Jira" },
 };
 
 function uid() {

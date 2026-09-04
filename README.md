@@ -57,15 +57,16 @@ worklog-app/
 2. On Save, the entries are POSTed as one JSON payload (with a unique
    `submissionId`) to the Apps Script Web App.
 3. The script validates everything again server-side (never trusts the
-   client), maps each duration preset to its actual start/end time and
-   a Jira-format duration string (`1d`, `5h`), and appends one row per
-   ticket to the correct month section of the sheet — creating a new
-   `MONTH YYYY` heading with exactly 3 blank rows before it when a new
-   month starts, and never touching prior months' rows. If the same
-   ticket already has a row for that date (from this submission or an
-   earlier one), the new duration is added into that row instead of
-   creating a duplicate — e.g. 1st Half now and 2nd Half later the same
-   day becomes one row spanning both, `1d` total, not two rows.
+   client), maps each preset to its start time and Jira-format time
+   spent (`1d`, `5h`), and writes **one row per entry** into the correct
+   month section — `Date | Ticket | Start Time | Time Spent`. Rows are
+   kept in ascending date order (then start time), so a backfilled
+   earlier date is inserted in its proper place, not appended at the
+   bottom. A new month gets its own `MONTH YYYY` heading with exactly 3
+   blank rows before it; prior months are never touched. Rows are never
+   merged: the same ticket morning and afternoon is two rows, because
+   it is two Jira worklogs (and `1d` is 8h in Jira, so two 5h halves
+   must not collapse into it).
 4. If you're offline, the payload is queued in the browser's storage and
    retried automatically once you're back online — nothing is lost, and
    duplicate delivery is prevented by the same `submissionId` check on
@@ -96,20 +97,25 @@ worklog-app/
   outgrow this (hundreds of queued offline entries), swap the
   `readQueue`/`writeQueue` functions in `app.js` for an IndexedDB-backed
   version.
-- **Fixed duration presets instead of free time entry** — the form asks
-  for a ticket and one of **1 Day** / **1st Half** / **2nd Half**
-  instead of manual start/end times. Each preset maps (server-side, so
-  the client can't spoof it) to a fixed window — 1 Day: 8:00 AM–6:00 PM,
-  1st Half: 8:00 AM–1:00 PM, 2nd Half: 2:00 PM–7:00 PM — and a
-  Jira-format duration (`1d`, `5h`) written to the sheet. This matches
-  how the data is meant to be used later: filled into Jira's "Log work"
-  dialog, which only takes a start date and a time-spent duration.
-- **Same ticket, same date → merged, not duplicated** — if you log
-  1st Half now and 2nd Half later (or in one submission with 2 tasks
-  for the same ticket), the backend finds the existing row for that
-  ticket+date and adds the durations together (`5h` + `5h` → `1d`),
-  widening the displayed time range rather than creating a second row.
-  A different date is unaffected — that's simply its own separate row.
+- **One row = one Jira worklog** — the sheet is shaped for Jira's "Log
+  work" dialog, which takes exactly a ticket, a "Date started" (date +
+  time) and a "Time spent" duration; there is no end time in Jira, so
+  there is none here either. Presets map server-side (so the client
+  can't spoof them): 1 Day → starts 8:00 AM, `1d`; 1st Half → starts
+  8:00 AM, `5h`; 2nd Half → starts 2:00 PM, `5h`. Jira treats `1d` as
+  8h by default and that is deliberately left alone.
+- **Never merged, always sorted** — logging the same ticket morning and
+  afternoon is two rows (two worklogs), never one. Rows within a month
+  are kept in ascending (date, start time) order, so backfilling an
+  earlier day lands in the right place.
+- **Dates are `YYYY-MM-DD`** — the month-end CSV goes to a Claude chat
+  to log into Jira, and `04-09-2026` is ambiguous (April 9 or Sept 4?)
+  while ISO isn't.
+- **Every cell is written as plain text** — Sheets otherwise silently
+  turns `SEPTEMBER 2026` into a date (which broke month detection and
+  produced duplicate headings) and dates/times into locale-formatted
+  values that export inconsistently. Detection also recognises a
+  heading Sheets already converted, and rewrites it back to text.
 - **Historical/backfilled dates** — "Log another date" lets you submit
   for any date. The backend places new rows into the correct month
   section regardless of submission order: if that month's heading
@@ -131,11 +137,10 @@ worklog-app/
   time entry, each mapped server-side to a real time window and a
   Jira-format duration string
 - Client-side validation: required ticket, required duration selection
-- Google Sheet layout: `Date | Start Time | End Time | Duration |
-  Ticket`, times stored as 12-hour AM/PM (e.g. `08:00 AM`), duration in
-  Jira's own format (`1d`, `5h`)
-- Same-ticket/same-date merging: a second entry for a ticket already
-  logged that day adds to the existing row instead of duplicating it
+- Google Sheet layout: `Date | Ticket | Start Time | Time Spent`, dates
+  as `YYYY-MM-DD`, times as 12-hour AM/PM (e.g. `08:00 AM`), time spent
+  in Jira's own format (`1d`, `5h`); one row per entry, kept in
+  ascending date order
 - Sheet formatting applied automatically on every save: bold header row,
   accent month heading, alternating row shading, borders, sensible
   column widths
